@@ -1,0 +1,9 @@
+date,equipment,part_number,symptom,cause,countermeasure,severity,tags
+2026-04-12,LATHE MK3,SP-4412,Vibration of 5.1 mm/s RMS at 3000 rpm during cutting,Spindle cartridge front bearing worn beyond service limit,Replaced spindle cartridge and recalibrated taper runout,high,spindle;vibration
+2026-04-18,LATHE MK3,CB-1180,Chip conveyor belt slipping and chips accumulating in the tank,Belt tension below specification due to stretched polyurethane,Adjusted tensioner; belt scheduled for replacement every 12 months,medium,conveyor;chips
+2026-05-02,CNC SERVO PRESS PP-220,BK-2207,Press slide overshoots bottom dead center by 0.3 mm,Brake unit IGBT gate driver degraded,Replaced brake unit BK-2207 and updated drive firmware,critical,brake;overshoot
+2026-05-09,CNC SERVO PRESS PP-220,SC-1183,Ball screw backlash increased to 0.12 mm,Lubrication line clogged; way oil filter elements past service life,Replaced OL-0033 filter elements and flushed lubrication line,high,ballscrew;backlash
+2026-05-21,LATHE MK3,OL-0033,Coolant concentration drifting below 6 % each week,Strainer full of fine chips allowing tramp oil ingress,Cleaned strainer and installed skimmer; concentration back to 9 %,low,coolant
+2026-06-03,CNC SERVO PRESS PP-220,BK-2207,ブレーキ停止時間が1.2秒に悪化し、下死点オーバーシュートが再発,ゲートドライバ基板の熱劣化。ユニット冷却ファンのフィルタ目詰まりが根本原因,冷却ファンフィルタを月次清掃の点検項目に追加。ブレーキ停止時間は0.7秒に回復,high,brake;thermal
+2026-06-15,MILLING CENTER MV-5,,Spindle air purge pressure alarm PC-04 recurring,Regulator diaphragm cracked allowing moisture into the air line,Installed air dryer and replaced diaphragm,medium,pneumatic
+2026-06-27,LATHE MK3,TG-0921,Lifting jig hook deformation found during spindle replacement inspection,Overload beyond the 100 kg rating during previous maintenance,Retired jig; added rated-load label and two-person rule,low,rigging
