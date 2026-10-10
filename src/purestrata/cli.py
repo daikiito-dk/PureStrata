@@ -2,9 +2,11 @@
 
 purestrata ingest-manual <files...> --out corpus/
 purestrata ingest-dxf <files...> --out corpus/
+purestrata ingest-step <files...> --out corpus/
 purestrata ingest-failures <files...> --out corpus/
 purestrata inspect --corpus corpus/
 purestrata search "spindle vibration" --corpus corpus/
+purestrata call search_drawings '{"min_diameter": 24, "max_diameter": 26}' --corpus corpus/
 purestrata tools openai            # print tool schemas for Grok/OpenAI
 purestrata export cot --corpus corpus/ --out dataset.jsonl
 purestrata serve --corpus corpus/  # MCP server over stdio
@@ -21,12 +23,14 @@ from .corpus import Corpus, write_chunks
 from .ingest.cad import ingest_dxf
 from .ingest.failures import ingest_failures
 from .ingest.manual import ingest_manual
+from .ingest.step import ingest_step
 from .tools import ToolError, anthropic_tools, json_schemas, openai_tools
 from .types import ALL_KINDS, derive_doc_id
 
 INGEST_COMMANDS = {
     "ingest-manual": ingest_manual,
     "ingest-dxf": ingest_dxf,
+    "ingest-step": ingest_step,
     "ingest-failures": ingest_failures,
 }
 
@@ -41,6 +45,7 @@ def _build_parser() -> argparse.ArgumentParser:
     for name, help_text in (
         ("ingest-manual", "Ingest Markdown/PDF manuals and spec sheets"),
         ("ingest-dxf", "Ingest ASCII DXF CAD drawings"),
+        ("ingest-step", "Ingest STEP (ISO 10303-21) 3D models"),
         ("ingest-failures", "Ingest CSV/JSONL failure logs"),
     ):
         p = sub.add_parser(name, help=help_text)
@@ -64,6 +69,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--corpus", default="corpus", help="Corpus directory (default: ./corpus)")
     p.add_argument("--out", required=True, help="Output JSONL path")
     p.add_argument("--limit", type=int, help="Maximum number of records")
+
+    p = sub.add_parser("call", help="Call one tool locally and print its JSON result")
+    p.add_argument("tool", help="Tool name, e.g. search_drawings")
+    p.add_argument("arguments", nargs="?", default="{}", help="Tool arguments as a JSON object")
+    p.add_argument("--corpus", default="corpus", help="Corpus directory (default: ./corpus)")
 
     p = sub.add_parser("serve", help="Run the MCP server (stdio) over a corpus")
     p.add_argument("--corpus", default="corpus", help="Corpus directory (default: ./corpus)")
@@ -120,6 +130,20 @@ def _run_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_call(args: argparse.Namespace) -> int:
+    from .tools import ToolExecutor
+
+    try:
+        tool_args = json.loads(args.arguments)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"arguments must be a JSON object: {exc}") from exc
+    if not isinstance(tool_args, dict):
+        raise ValueError("arguments must be a JSON object")
+    result = ToolExecutor(Corpus.load(args.corpus)).execute(args.tool, tool_args)
+    print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    return 0
+
+
 def _run_serve(args: argparse.Namespace) -> int:
     from .mcp_server import serve
 
@@ -148,6 +172,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "export":
             return _run_export(args)
+        if args.command == "call":
+            return _run_call(args)
         if args.command == "serve":
             return _run_serve(args)
         parser.error(f"Unknown command: {args.command}")

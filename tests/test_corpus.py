@@ -27,11 +27,11 @@ def test_write_and_load_roundtrip(tmp_path, en_manual):
 
 def test_stats(corpus):
     stats = corpus.stats()
-    assert stats["total_chunks"] == 28
-    assert stats["by_kind"]["drawing"] == 1
+    assert stats["total_chunks"] == 29
+    assert stats["by_kind"]["drawing"] == 2
     assert stats["by_kind"]["part_record"] == 8
     assert stats["by_kind"]["safety_notice"] == 6
-    assert len(stats["documents"]) == 4
+    assert len(stats["documents"]) == 5
 
 
 def test_reingestion_is_idempotent(tmp_path, en_manual):

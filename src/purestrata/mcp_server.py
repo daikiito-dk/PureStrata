@@ -77,6 +77,28 @@ def build_mcp_server(corpus: Corpus):
         return run("get_drawing", drawing_id=drawing_id)
 
     @mcp.tool()
+    def search_drawings(
+        query: str | None = None,
+        min_diameter: float | None = None,
+        max_diameter: float | None = None,
+        fit: str | None = None,
+        material: str | None = None,
+        cad_format: str | None = None,
+        top_k: int = 10,
+    ) -> str:
+        """Find DXF drawings and STEP models by hole diameter (mm), fit class, material, format."""
+        return run(
+            "search_drawings",
+            query=query,
+            min_diameter=min_diameter,
+            max_diameter=max_diameter,
+            fit=fit,
+            material=material,
+            cad_format=cad_format,
+            top_k=top_k,
+        )
+
+    @mcp.tool()
     def search_failure_cases(query: str, equipment: str | None = None, top_k: int = 5) -> str:
         """Search past failures: symptom, root cause, countermeasure. Use for troubleshooting."""
         return run("search_failure_cases", query=query, equipment=equipment, top_k=top_k)

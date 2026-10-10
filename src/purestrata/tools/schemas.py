@@ -150,6 +150,47 @@ TOOLS: list[ToolSpec] = [
         },
     ),
     ToolSpec(
+        name="search_drawings",
+        description=(
+            "Find CAD drawings (DXF) and 3D models (STEP) by geometry and attributes: "
+            "hole or cylinder diameter range in millimetres, ISO fit class from diameter "
+            "callouts (e.g. 'H7'), material, file format, and optional free text. Returns "
+            "the features that matched each filter."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Optional text to rank by (part name, title, product).",
+                },
+                "min_diameter": {
+                    "type": "number",
+                    "description": "Minimum circular feature diameter in mm.",
+                },
+                "max_diameter": {
+                    "type": "number",
+                    "description": "Maximum circular feature diameter in mm.",
+                },
+                "fit": {
+                    "type": "string",
+                    "description": "ISO fit class in a diameter callout, e.g. 'H7' or 'h6'.",
+                },
+                "material": {
+                    "type": "string",
+                    "description": "Material such as 'SS400' or 'S45C'.",
+                },
+                "cad_format": {
+                    "type": "string",
+                    "enum": ["dxf", "step"],
+                    "description": "Restrict to 2D DXF drawings or 3D STEP models.",
+                },
+                "top_k": {**_TOP_K_PARAM, "default": 10},
+            },
+            "required": [],
+        },
+    ),
+    ToolSpec(
         name="get_failure_case",
         description="Get one full failure case (symptom, cause, countermeasure) by its ID.",
         parameters={

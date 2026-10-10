@@ -7,7 +7,7 @@ The open data layer for manufacturing AI. Ingest **drawings, spec sheets, and fa
 Manufacturing is where LLMs struggle most: CAD drawings, dense maintenance manuals, and failure knowledge locked in spreadsheets. Japanese factories in particular hold decades of primary data — drawings, 保全記録, and skilled-worker know-how — that never reaches the open web. PureStrata turns those documents into a structured, auditable layer that model developers and AI teams can actually use.
 
 ```
-[ manuals (MD/PDF) ]   [ drawings (DXF) ]   [ failure logs (CSV/JSONL) ]
+[ manuals (MD/PDF) ]   [ drawings (DXF/STEP) ]   [ failure logs (CSV/JSONL) ]
         │                     │                      │
         └─────────────────────┴──────────────────────┘
                               ▼
@@ -54,12 +54,16 @@ Or step by step:
 purestrata ingest-manual examples/data/manuals/lathe_mk3_maintenance.md --out corpus/
 purestrata ingest-manual examples/data/manuals/ja/cnc_press_maintenance.md --out corpus/
 purestrata ingest-dxf examples/data/cad/bracket_mk3.dxf --out corpus/
+purestrata ingest-step examples/data/cad/bracket_assy_mk3.step --out corpus/
 purestrata ingest-failures examples/data/failures/plant_failures.csv --out corpus/
 
 # 2. Inspect and search (English and Japanese)
 purestrata inspect --corpus corpus/
 purestrata search "spindle vibration" --corpus corpus/
 purestrata search "ブレーキ 停止時間" --corpus corpus/
+
+# Call any tool directly, exactly as an LLM would
+purestrata call search_drawings '{"min_diameter": 24, "max_diameter": 26}' --corpus corpus/
 
 # 3. Export fine-tuning datasets from the same corpus
 purestrata export chat       --corpus corpus/ --out dataset_chat.jsonl
@@ -75,7 +79,8 @@ purestrata export cot        --corpus corpus/ --out dataset_cot.jsonl
 | `procedure` | Numbered lists in manuals | Ordered maintenance steps as structured arrays |
 | `safety_notice` | WARNING / CAUTION lines (EN + JA) | Severity-tagged precautions |
 | `part_record` | Parts tables | Part number, name, quantity, spec |
-| `drawing` | ASCII DXF files | Title block, layers, entity counts, annotations, bounds |
+| `drawing` | ASCII DXF files | Title block, layers, entities, hole diameters, fit callouts (e.g. `25 H7`), size |
+| `drawing` | STEP files (AP203/AP214/AP242) | Products, assembly tree with quantities, units, cylindrical features, size |
 | `failure_case` | CSV / JSONL failure logs | Symptom, root cause, countermeasure, severity, tags |
 
 ## Tools (identical over MCP, OpenAI-style calls, and Python)
@@ -88,6 +93,7 @@ purestrata export cot        --corpus corpus/ --out dataset_cot.jsonl
 | `get_procedure` | Full ordered steps of one procedure |
 | `search_parts` | Parts lookup from parts lists |
 | `list_drawings` / `get_drawing` | CAD inventory and full drawing metadata |
+| `search_drawings` | Geometry search across DXF and STEP: hole diameter range (mm), fit class, material, format |
 | `search_failure_cases` | **Troubleshooting first:** match symptoms against past failures |
 | `get_failure_case` | One full case by ID |
 
@@ -108,11 +114,20 @@ uv run python examples/api_tool_use.py "The lathe is vibrating during cutting. W
 
 Your corpus is queried locally; results go back to the model with provenance.
 
-**MCP (Model Context Protocol)** — run the bundled server and register it with any MCP client:
+**MCP (Model Context Protocol)** — run the bundled server from any MCP client. No install is needed with `uvx`:
 
 ```json
-{ "mcpServers": { "purestrata": { "command": "purestrata", "args": ["serve", "--corpus", "/path/to/corpus"] } } }
+{
+  "mcpServers": {
+    "purestrata": {
+      "command": "uvx",
+      "args": ["--from", "purestrata[mcp]", "purestrata", "serve", "--corpus", "/abs/path/to/corpus"]
+    }
+  }
+}
 ```
+
+Step-by-step setup for Claude Desktop, Claude Code, Factory Droid, Cursor, and VS Code, with example prompts and troubleshooting: **[docs/MCP.md](docs/MCP.md)**.
 
 **Python API** — the same tools as a library:
 
@@ -137,9 +152,9 @@ CoT records are a deliberate scaffold: they are transparent, grounded in structu
 
 ## Status and roadmap
 
-Current: local ingestion (Markdown, PDF, ASCII DXF, CSV/JSONL), BM25 search with Japanese support, MCP server, tool schemas, fine-tune exports.
+Current: local ingestion (Markdown, PDF, ASCII DXF, STEP AP203/AP214/AP242, CSV/JSONL), BM25 search with Japanese support, geometry search over drawings (hole diameter, fit class, material, CAD format), MCP server, tool schemas, fine-tune exports.
 
-Planned: HTML/DXF-R2018 support, STEP files, per-layer geometry search, embedding search, evaluation harness for fine-tune sets, and a hosted SaaS for teams that need managed ingestion, access control, and expert review workflows.
+Planned: HTML/DXF-R2018 support, per-layer geometry search, embedding search, evaluation harness for fine-tune sets, and a hosted SaaS for teams that need managed ingestion, access control, and expert review workflows.
 
 ## Development
 
@@ -163,11 +178,12 @@ PureStrata は製造業AIのためのオープンなデータレイヤーです�
 
 ### 特徴
 
-- **3つのレコード族を第一級データとして扱う**: 仕様書（`manual_section` / `procedure` / `safety_notice` / `part_record`）、図面（DXFタイトルブロック・レイヤー・注記）、不具合ナレッジ（現象→原因→対策）。特に「不具合ナレッジ」は通常のRAGには欠けている層で、工場のトラブルシューティングの中核です。
+- **3つのレコード族を第一級データとして扱う**: 仕様書（`manual_section` / `procedure` / `safety_notice` / `part_record`）、図面（DXF・STEP：タイトルブロック、レイヤー、注記、穴径・公差クラス、組立構成）、不具合ナレッジ（現象→原因→対策）。特に「不具合ナレッジ」は通常のRAGには欠けている層で、工場のトラブルシューティングの中核です。
+- **図面ジオメトリ検索**: `search_drawings` で穴径範囲（mm）・公差クラス（H7等）・材料・CAD形式（DXF/STEP）を横断して図面を絞り込めます。
 - **完全な出所証明**: すべてのレコードが元ファイルと位置情報を保持し、LLMの回答がどの図面・セクション・行に遡れるか監査できます。
 - **ロックインなし**: コーパスはプレーンなJSONL。コアは依存ゼロ。ローカル実行でエアギップ環境にも対応します。
 - **日本語対応検索**: 依存ゼロのBM25実装がCJKバイグラム解析に対応し、日本語の不具合記録もそのまま検索できます。
-- **Grok / OpenAI / ローカルLLM対応**: OpenAI互換のツール呼び出し用スキーマと、MCPサーバーの両方を同梱。特定モデルへの依存はありません。
+- **Grok / OpenAI / ローカルLLM対応**: OpenAI互換のツール呼び出し用スキーマと、MCPサーバーの両方を同梱（セットアップ手順は [docs/MCP.md](docs/MCP.md)）。特定モデルへの依存はありません。
 
 ### クイックスタート
 
@@ -180,8 +196,10 @@ make demo          # サンプルデータを取り込んで検索
 # 手順で実行する場合
 purestrata ingest-manual examples/data/manuals/ja/cnc_press_maintenance.md --out corpus/
 purestrata ingest-dxf examples/data/cad/bracket_mk3.dxf --out corpus/
+purestrata ingest-step examples/data/cad/bracket_assy_mk3.step --out corpus/
 purestrata ingest-failures examples/data/failures/plant_failures.csv --out corpus/
 purestrata search "ブレーキ 停止時間" --corpus corpus/
+purestrata call search_drawings '{"min_diameter": 24, "max_diameter": 26}' --corpus corpus/
 purestrata export cot --corpus corpus/ --out dataset_cot.jsonl
 ```
 

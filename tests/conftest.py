@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from purestrata import Corpus, ingest_dxf, ingest_failures, ingest_manual
+from purestrata import Corpus, ingest_dxf, ingest_failures, ingest_manual, ingest_step
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,16 +32,24 @@ def dxf_path(data_dir: Path) -> Path:
 
 
 @pytest.fixture
+def step_path(data_dir: Path) -> Path:
+    return data_dir / "cad" / "bracket_assy_mk3.step"
+
+
+@pytest.fixture
 def failures_csv(data_dir: Path) -> Path:
     return data_dir / "failures" / "plant_failures.csv"
 
 
 @pytest.fixture
-def corpus(en_manual: Path, ja_manual: Path, dxf_path: Path, failures_csv: Path) -> Corpus:
+def corpus(
+    en_manual: Path, ja_manual: Path, dxf_path: Path, step_path: Path, failures_csv: Path
+) -> Corpus:
     chunks = (
         ingest_manual(en_manual)
         + ingest_manual(ja_manual)
         + ingest_dxf(dxf_path)
+        + ingest_step(step_path)
         + ingest_failures(failures_csv)
     )
     return Corpus(chunks)

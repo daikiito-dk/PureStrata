@@ -20,6 +20,7 @@ demo:
 	$(PY) purestrata ingest-manual examples/data/manuals/lathe_mk3_maintenance.md \
 		examples/data/manuals/ja/cnc_press_maintenance.md --out examples/corpus
 	$(PY) purestrata ingest-dxf examples/data/cad/bracket_mk3.dxf --out examples/corpus
+	$(PY) purestrata ingest-step examples/data/cad/bracket_assy_mk3.step --out examples/corpus
 	$(PY) purestrata ingest-failures examples/data/failures/plant_failures.csv \
 		--out examples/corpus
 	$(PY) purestrata inspect --corpus examples/corpus

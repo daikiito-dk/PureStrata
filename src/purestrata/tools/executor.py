@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..corpus import Corpus
+from ..ingest.geometry import feature_diameter_mm
 from ..types import DRAWING, FAILURE_CASE, PART_RECORD, PROCEDURE, SAFETY_NOTICE, Chunk
 from .schemas import tool_by_name
 
@@ -46,6 +47,15 @@ def _clamp_top_k(value: Any, default: int) -> int:
 
 def _as_str(value: Any) -> str:
     return str(value).strip() if value is not None else ""
+
+
+def _as_float(value: Any, name: str) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ToolError(f"'{name}' must be a number.") from exc
 
 
 class ToolExecutor:
@@ -132,6 +142,7 @@ class ToolExecutor:
                 {
                     "drawing_id": chunk.metadata.get("drawing_id"),
                     "chunk_id": chunk.chunk_id,
+                    "cad_format": chunk.metadata.get("format", "dxf"),
                     "file_name": chunk.metadata.get("file_name"),
                     "units": chunk.metadata.get("units"),
                     "title_block": chunk.metadata.get("title_block", {}),
@@ -147,6 +158,78 @@ class ToolExecutor:
             raise ToolError("get_drawing requires a 'drawing_id'.")
         chunk = self._find_by_id(drawing_id, DRAWING)
         return _result(chunk)
+
+    def _tool_search_drawings(self, args: dict) -> dict:
+        query = _as_str(args.get("query"))
+        fit = _as_str(args.get("fit"))
+        material = _as_str(args.get("material"))
+        cad_format = _as_str(args.get("cad_format")).casefold()
+        min_d = _as_float(args.get("min_diameter"), "min_diameter")
+        max_d = _as_float(args.get("max_diameter"), "max_diameter")
+        top_k = _clamp_top_k(args.get("top_k", 10), 10)
+        if min_d is not None and max_d is not None and min_d > max_d:
+            raise ToolError("'min_diameter' must not exceed 'max_diameter'.")
+
+        drawings = self.corpus.by_kind(DRAWING)
+        if query:
+            scored = self.corpus.search(query, kinds=DRAWING, top_k=max(1, len(drawings)))
+        else:
+            scored = [(chunk, None) for chunk in drawings]
+
+        results = []
+        for chunk, score in scored:
+            meta = chunk.metadata
+            if cad_format and meta.get("format", "dxf") != cad_format:
+                continue
+            if material:
+                haystack = meta.get("title_block", {}).get("material") or chunk.text
+                if material.casefold() not in haystack.casefold():
+                    continue
+            record = {
+                "drawing_id": meta.get("drawing_id"),
+                "chunk_id": chunk.chunk_id,
+                "cad_format": meta.get("format", "dxf"),
+                "title_block": meta.get("title_block", {}),
+                "units": meta.get("units"),
+                "size": meta.get("size"),
+                "circular_features": meta.get("circular_features", []),
+                "source": _source(chunk),
+            }
+            if min_d is not None or max_d is not None:
+                matched = [
+                    feature
+                    for feature in meta.get("circular_features", [])
+                    if (min_d is None or feature_diameter_mm(feature) >= min_d)
+                    and (max_d is None or feature_diameter_mm(feature) <= max_d)
+                ]
+                if not matched:
+                    continue
+                record["matched_features"] = matched
+            if fit:
+                callouts = [
+                    callout
+                    for callout in meta.get("diameter_callouts", [])
+                    if (callout.get("fit") or "") == fit
+                ]
+                if not callouts:
+                    continue
+                record["matched_callouts"] = callouts
+            if score is not None:
+                record["score"] = round(score, 3)
+            results.append(record)
+        filters = {
+            key: value
+            for key, value in (
+                ("query", query),
+                ("min_diameter", min_d),
+                ("max_diameter", max_d),
+                ("fit", fit),
+                ("material", material),
+                ("cad_format", cad_format),
+            )
+            if value not in (None, "")
+        }
+        return {"filters": filters, "results": results[:top_k]}
 
     def _tool_search_failure_cases(self, args: dict) -> dict:
         query = _as_str(args.get("query"))

@@ -14,6 +14,13 @@ from pathlib import Path
 
 from ..pipeline.clean import clean_inline
 from ..types import DRAWING, Chunk, Provenance, derive_doc_id, new_chunk
+from .geometry import (
+    describe_circular_features,
+    format_number,
+    parse_diameter_callouts,
+    size_from_bounds,
+    summarize_circular_features,
+)
 
 _UNIT_CODES = {
     0: "unitless",
@@ -164,6 +171,13 @@ def parse_dxf(path: str | Path) -> dict:
                 if match:
                     title_block.setdefault(_norm_key(match.group(1)), clean_inline(match.group(2)))
 
+    circles = [
+        (entity["radius"] * 2, entity["layer"] or "0")
+        for entity in entities
+        if entity["type"] == "CIRCLE" and entity["radius"]
+    ]
+    bounds = _compute_bounds(entities)
+
     return {
         "units": units,
         "layers": layers,
@@ -172,7 +186,10 @@ def parse_dxf(path: str | Path) -> dict:
         "per_layer_counts": {name: dict(counts) for name, counts in per_layer_counts.items()},
         "text_annotations": text_annotations,
         "title_block": title_block,
-        "bounds": _compute_bounds(entities),
+        "bounds": bounds,
+        "size": size_from_bounds(bounds),
+        "circular_features": summarize_circular_features(circles, units),
+        "diameter_callouts": parse_diameter_callouts(text_annotations),
     }
 
 
@@ -212,9 +229,13 @@ def ingest_dxf(path: str | Path, doc_id: str | None = None) -> list[Chunk]:
 
     text = _drawing_text(drawing_id, path.name, title_block, parsed)
     metadata = {
+        "format": "dxf",
         "drawing_id": drawing_id,
         "file_name": path.name,
         "units": parsed["units"],
+        "size": parsed["size"],
+        "circular_features": parsed["circular_features"],
+        "diameter_callouts": parsed["diameter_callouts"],
         "layers": parsed["layers"],
         "entity_counts": parsed["entity_counts"],
         "per_layer_counts": parsed["per_layer_counts"],
@@ -247,6 +268,18 @@ def _drawing_text(drawing_id: str, file_name: str, title_block: dict, parsed: di
         parts.append(
             "Entities: " + ", ".join(f"{name}={count}" for name, count in sorted(counts.items()))
         )
+    if parsed["circular_features"]:
+        parts.append(
+            "Circular features: "
+            + describe_circular_features(parsed["circular_features"], parsed["units"])
+        )
+    callouts = [
+        f"diameter {format_number(c['nominal'])} {c['fit']}"
+        for c in parsed["diameter_callouts"]
+        if c["fit"]
+    ]
+    if callouts:
+        parts.append("Fits: " + ", ".join(callouts))
     annotations = parsed["text_annotations"]
     if annotations:
         parts.append("Annotations: " + "; ".join(annotations[:10]))

@@ -13,9 +13,9 @@ def executor(corpus):
     return ToolExecutor(corpus)
 
 
-def test_nine_tools_defined():
-    assert len(TOOLS) == 9
-    assert len(openai_tools()) == 9
+def test_ten_tools_defined():
+    assert len(TOOLS) == 10
+    assert len(openai_tools()) == 10
 
 
 def test_list_corpus(executor, corpus):
@@ -23,7 +23,7 @@ def test_list_corpus(executor, corpus):
     stats = corpus.stats()
     assert result["total_chunks"] == stats["total_chunks"]
     assert result["by_kind"]["failure_case"] == 8
-    assert len(result["documents"]) == 4
+    assert len(result["documents"]) == 5
 
 
 def test_search_documents_with_sources(executor):
@@ -66,11 +66,57 @@ def test_parts_lookup(executor):
 
 def test_list_drawings_and_get_drawing(executor):
     listed = executor.execute("list_drawings")
-    assert [r["drawing_id"] for r in listed["results"]] == ["BRK-0042-A"]
+    formats = {r["drawing_id"]: r["cad_format"] for r in listed["results"]}
+    assert formats == {"BRK-0042-A": "dxf", "BRK-ASSY-01": "step"}
     detail = executor.execute("get_drawing", {"drawing_id": "BRK-0042-A"})
     assert detail["metadata"]["title_block"]["material"] == "SS400"
     assert detail["metadata"]["units"] == "mm"
     assert detail["metadata"]["entity_counts"]["TEXT"] == 6
+    model = executor.execute("get_drawing", {"drawing_id": "BRK-ASSY-01"})
+    assert model["metadata"]["format"] == "step"
+
+
+def _ids(result: dict) -> set[str]:
+    return {record["drawing_id"] for record in result["results"]}
+
+
+def test_search_drawings_by_diameter_spans_formats(executor):
+    result = executor.execute("search_drawings", {"min_diameter": 24, "max_diameter": 26})
+    assert _ids(result) == {"BRK-0042-A", "BRK-ASSY-01"}
+    for record in result["results"]:
+        assert [f["diameter_mm"] for f in record["matched_features"]] == [25.0]
+
+
+def test_search_drawings_small_holes_only_in_step(executor):
+    result = executor.execute("search_drawings", {"max_diameter": 10})
+    assert _ids(result) == {"BRK-ASSY-01"}
+    assert result["results"][0]["matched_features"][0]["count"] == 2
+
+
+def test_search_drawings_by_fit_class(executor):
+    result = executor.execute("search_drawings", {"fit": "H7"})
+    assert _ids(result) == {"BRK-0042-A"}
+    assert result["results"][0]["matched_callouts"][0]["nominal"] == 25.0
+    assert executor.execute("search_drawings", {"fit": "h7"})["results"] == []
+
+
+def test_search_drawings_material_format_and_query(executor):
+    assert _ids(executor.execute("search_drawings", {"material": "SS400"})) == {
+        "BRK-0042-A",
+        "BRK-ASSY-01",
+    }
+    assert _ids(executor.execute("search_drawings", {"material": "S45C"})) == {"BRK-ASSY-01"}
+    assert _ids(executor.execute("search_drawings", {"cad_format": "dxf"})) == {"BRK-0042-A"}
+    ranked = executor.execute("search_drawings", {"query": "位置決めピン"})
+    assert _ids(ranked) == {"BRK-ASSY-01"}
+    assert "score" in ranked["results"][0]
+
+
+def test_search_drawings_rejects_bad_range(executor):
+    with pytest.raises(ToolError):
+        executor.execute("search_drawings", {"min_diameter": 30, "max_diameter": 10})
+    with pytest.raises(ToolError):
+        executor.execute("search_drawings", {"min_diameter": "wide"})
 
 
 def test_failure_case_search_with_equipment_filter(executor):

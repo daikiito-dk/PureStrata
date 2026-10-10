@@ -16,6 +16,7 @@ from .export.finetune import (
 from .ingest.cad import ingest_dxf
 from .ingest.failures import ingest_failures
 from .ingest.manual import ingest_manual
+from .ingest.step import ingest_step, parse_step
 from .search import SearchIndex, has_cjk, tokenize
 from .tools import TOOLS, ToolError, ToolExecutor, anthropic_tools, json_schemas, openai_tools
 from .types import (
@@ -58,9 +59,11 @@ __all__ = [
     "ingest_dxf",
     "ingest_failures",
     "ingest_manual",
+    "ingest_step",
     "json_schemas",
     "new_chunk",
     "openai_tools",
+    "parse_step",
     "tokenize",
     "write_chunks",
     "write_jsonl",

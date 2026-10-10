@@ -63,6 +63,20 @@ def test_export_commands(tmp_path, en_manual, failures_csv, capsys):
     assert "Exported 3 cot records" in capsys.readouterr().out
 
 
+def test_ingest_step_and_call_tool(tmp_path, step_path, capsys):
+    corpus_dir = str(tmp_path / "corpus")
+    assert main(["ingest-step", str(step_path), "--out", corpus_dir]) == 0
+    capsys.readouterr()
+
+    args = '{"min_diameter": 8, "max_diameter": 10}'
+    assert main(["call", "search_drawings", args, "--corpus", corpus_dir]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["results"][0]["drawing_id"] == "BRK-ASSY-01"
+
+    assert main(["call", "search_drawings", "[1]", "--corpus", corpus_dir]) == 1
+    assert "JSON object" in capsys.readouterr().err
+
+
 def test_missing_file_error(tmp_path, capsys):
     rc = main(["ingest-manual", str(tmp_path / "nope.md"), "--out", str(tmp_path)])
     assert rc == 1
