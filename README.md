@@ -4,6 +4,8 @@
 
 The open data layer for manufacturing AI. Ingest **drawings, spec sheets, and failure knowledge** into one portable, provenance-tagged corpus — query it from any LLM through MCP or tool calling, then export the same corpus as **fine-tuning datasets**.
 
+Project site: **https://daikiito-dk.github.io/PureStrata/**
+
 Manufacturing is where LLMs struggle most: CAD drawings, dense maintenance manuals, and failure knowledge locked in spreadsheets. Japanese factories in particular hold decades of primary data — drawings, 保全記録, and skilled-worker know-how — that never reaches the open web. PureStrata turns those documents into a structured, auditable layer that model developers and AI teams can actually use.
 
 ```
@@ -173,6 +175,8 @@ make test     # pytest
 ## 日本語
 
 PureStrata は製造業AIのためのオープンなデータレイヤーです。**図面・仕様書・不具合ナレッジ**を1つのポータブルで出所証明（プロビナンス）付きのコーパスに取り込み、MCPやツール呼び出しでどのLLMからでも検索でき、同じコーパスから**微調整用データセット**を書き出せます。
+
+プロジェクトサイト: **https://daikiito-dk.github.io/PureStrata/**
 
 製造業はLLMが最も苦手とする領域です。CAD図面、高密度な保全マニュアル、そしてスプレッドシートに閉じ込められた不具合ナレッジ。特に日本の工場には、図面・保全記録・熟練工のノウハウという、Web上に存在しない一次データが蓄積されています。PureStrataはそれらの文書を、構造化され監査可能なデータ層に変換します。
 

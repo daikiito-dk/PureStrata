@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PureStrata — The open data layer for manufacturing AI</title>
+<meta name="description" content="Ingest drawings, spec sheets, and failure knowledge into one portable, provenance-tagged corpus. Query it from any LLM through MCP or tool calling, and export it as fine-tuning datasets. 図面・仕様書・不具合ナレッジを、出所証明付きのポータブルなコーパスに。">
+<meta property="og:title" content="PureStrata — The open data layer for manufacturing AI">
+<meta property="og:description" content="Drawings, spec sheets, and failure knowledge as LLM tools and fine-tuning datasets. Provenance on every record, zero required dependencies, Japanese search built in.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://daikiito-dk.github.io/PureStrata/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='6' width='24' height='5' rx='1.5' fill='%23f5a524'/%3E%3Crect x='2' y='14' width='28' height='5' rx='1.5' fill='%2338bdf8'/%3E%3Crect x='4' y='22' width='24' height='5' rx='1.5' fill='%2334d399'/%3E%3C/svg%3E">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"PureStrata","applicationCategory":"DeveloperApplication","operatingSystem":"Cross-platform","softwareVersion":"0.2.0","programmingLanguage":"Python","license":"https://github.com/daikiito-dk/PureStrata/blob/main/LICENSE","offers":{"@type":"Offer","price":"0"}}
+</script>
+<style>
+:root{
+  --bg:#0a0f1a; --bg2:#0d1523; --card:rgba(255,255,255,.045); --border:rgba(255,255,255,.09);
+  --text:#e7edf6; --muted:#9fb0c8; --accent:#f5a524; --blue:#38bdf8; --green:#34d399;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:16px/1.75 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",Meiryo,sans-serif}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:var(--mono);font-size:.9em;background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:5px;padding:.08em .35em}
+pre{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px 22px;overflow-x:auto;line-height:1.65;margin:0}
+pre code{background:none;border:none;padding:0;font-size:.86rem}
+.container{max-width:1080px;margin:0 auto;padding:0 24px}
+body.lang-en .i-ja{display:none}
+body.lang-ja .i-en{display:none}
+header{position:sticky;top:0;z-index:50;background:rgba(10,15,26,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+.nav{display:flex;align-items:center;gap:22px;height:60px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.12rem;color:var(--text)}
+.brand:hover{text-decoration:none}
+.brand .bars{display:inline-block}
+.nav a{color:var(--muted);font-size:.95rem}
+.nav a:hover{color:var(--text);text-decoration:none}
+.nav .links{display:flex;gap:18px;flex-wrap:wrap;margin-left:8px}
+.lang{margin-left:auto;display:flex;gap:2px;border:1px solid var(--border);border-radius:8px;padding:3px}
+.lang button{background:none;border:0;color:var(--muted);font:inherit;font-size:.85rem;padding:2px 10px;border-radius:6px;cursor:pointer}
+.lang button.active{background:rgba(255,255,255,.1);color:var(--text)}
+.hero{padding:76px 0 40px;background:
+  radial-gradient(1000px 420px at 20% -10%, rgba(56,189,248,.13), transparent 60%),
+  radial-gradient(900px 420px at 85% -20%, rgba(245,165,36,.10), transparent 60%)}
+.hero h1{font-size:clamp(1.9rem,4.6vw,3.1rem);line-height:1.25;margin:0 0 14px;letter-spacing:-.02em}
+.hero h1 .hl{color:var(--accent)}
+.hero p.lead{font-size:1.13rem;color:var(--muted);max-width:760px;margin:0 0 26px}
+.cta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.btn{display:inline-block;padding:10px 20px;border-radius:10px;font-weight:600;font-size:.98rem;border:1px solid var(--border)}
+.btn:hover{text-decoration:none}
+.btn.primary{background:var(--accent);color:#161006;border-color:transparent}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.ghost{background:rgba(255,255,255,.05);color:var(--text)}
+.btn.ghost:hover{background:rgba(255,255,255,.1)}
+.install{color:var(--muted);font-size:.95rem}
+.pipe{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin:44px 0 8px}
+.pipe-col{display:flex;flex-direction:column;gap:10px}
+.pbox{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 16px;text-align:center;font-size:.93rem;line-height:1.4}
+.pbox small{display:block;color:var(--muted);font-size:.78rem;margin-top:1px}
+.parrow{color:var(--muted);font-size:1.2rem}
+.pbox.core{border-color:rgba(245,165,36,.55);background:rgba(245,165,36,.09)}
+.pbox.out{border-color:rgba(56,189,248,.4)}
+section{padding:64px 0;border-top:1px solid rgba(255,255,255,.055)}
+h2{font-size:1.7rem;margin:0 0 8px;letter-spacing:-.01em}
+.sub{color:var(--muted);max-width:720px;margin:0 0 34px}
+.grid{display:grid;gap:16px}
+.g4{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px}
+.card h3{margin:0 0 8px;font-size:1.06rem}
+.card p{margin:0;color:var(--muted);font-size:.95rem}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 10px}
+.chip{font-family:var(--mono);font-size:.76rem;color:var(--green);background:rgba(52,211,153,.09);border:1px solid rgba(52,211,153,.28);border-radius:99px;padding:2px 10px}
+.tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.tool{display:flex;gap:14px;align-items:baseline;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 18px}
+.tool code{white-space:nowrap;color:var(--accent);font-size:.85rem;background:none;border:none;padding:0}
+.tool span{color:var(--muted);font-size:.9rem}
+.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px;align-items:start}
+.tag{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:6px;display:block}
+.planned li{color:var(--muted)}
+footer{border-top:1px solid var(--border);padding:34px 0;color:var(--muted);font-size:.92rem}
+footer .f{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+@media (max-width:640px){
+  .nav{height:auto;padding:10px 0}
+  section{padding:48px 0}
+}
+</style>
+</head>
+<body class="lang-en">
+
+<header>
+  <div class="container nav">
+    <a class="brand" href="#top">
+      <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="6" width="24" height="5" rx="1.5" fill="#f5a524"/><rect x="2" y="14" width="28" height="5" rx="1.5" fill="#38bdf8"/><rect x="4" y="22" width="24" height="5" rx="1.5" fill="#34d399"/></svg>
+      PureStrata
+    </a>
+    <nav class="links" aria-label="Site">
+      <a href="#why"><span class="i-en">Why</span><span class="i-ja">目的</span></a>
+      <a href="#records"><span class="i-en">Records</span><span class="i-ja">レコード</span></a>
+      <a href="#tools"><span class="i-en">Tools</span><span class="i-ja">ツール</span></a>
+      <a href="#quickstart"><span class="i-en">Quickstart</span><span class="i-ja">始め方</span></a>
+      <a href="#integrations"><span class="i-en">Integrations</span><span class="i-ja">連携</span></a>
+      <a href="#roadmap"><span class="i-en">Roadmap</span><span class="i-ja">ロードマップ</span></a>
+    </nav>
+    <div class="lang" role="group" aria-label="Language">
+      <button id="btn-en" onclick="setLang('en')">EN</button>
+      <button id="btn-ja" onclick="setLang('ja')">日本語</button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <div class="container">
+    <h1><span class="i-en">The open data layer for <span class="hl">manufacturing AI</span></span><span class="i-ja">製造業AIのための<span class="hl">オープンなデータレイヤー</span></span></h1>
+    <p class="lead"><span class="i-en">PureStrata ingests <strong>drawings, spec sheets, and failure knowledge</strong> into one portable, provenance-tagged corpus. Any LLM can query it through MCP or tool calling, and the same corpus exports as <strong>fine-tuning datasets</strong>.</span><span class="i-ja">PureStrataは<strong>図面・仕様書・不具合ナレッジ</strong>を、1つのポータブルで出所証明（プロビナンス）付きのコーパスに取り込みます。MCPやツール呼び出しでどのLLMからでも検索でき、同じコーパスから<strong>微調整用データセット</strong>を書き出せます。</span></p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/daikiito-dk/PureStrata"><span class="i-en">GitHub repository</span><span class="i-ja">GitHubリポジトリ</span></a>
+      <a class="btn ghost" href="https://pypi.org/project/purestrata/"><span class="i-en">PyPI: pip install purestrata</span><span class="i-ja">PyPI: pip install purestrata</span></a>
+      <a class="btn ghost" href="https://github.com/daikiito-dk/PureStrata/blob/main/docs/MCP.md"><span class="i-en">MCP setup guide</span><span class="i-ja">MCPセットアップガイド</span></a>
+    </div>
+    <p class="install"><span class="i-en">Python 3.10+ · MIT License · zero required dependencies for the core</span><span class="i-ja">Python 3.10+ · MITライセンス · コアは必須依存ゼロ</span></p>
+    <div class="pipe" aria-label="Pipeline">
+      <div class="pipe-col">
+        <div class="pbox"><span class="i-en">manuals</span><span class="i-ja">マニュアル</span><small>MD / PDF</small></div>
+        <div class="pbox"><span class="i-en">drawings</span><span class="i-ja">図面</span><small>DXF / STEP</small></div>
+        <div class="pbox"><span class="i-en">failure logs</span><span class="i-ja">不具合記録</span><small>CSV / JSONL</small></div>
+      </div>
+      <div class="parrow">→</div>
+      <div class="pbox core"><span class="i-en">ingest</span><span class="i-ja">取り込み</span><small><span class="i-en">clean → structure → provenance</span><span class="i-ja">クリーニング → 構造化 → 出所付与</span></small></div>
+      <div class="parrow">→</div>
+      <div class="pbox core">corpus<small>*.strata.jsonl</small></div>
+      <div class="parrow">→</div>
+      <div class="pipe-col">
+        <div class="pbox out">MCP server</div>
+        <div class="pbox out"><span class="i-en">tool calling</span><span class="i-ja">ツール呼び出し</span><small>Grok / OpenAI / local</small></div>
+        <div class="pbox out"><span class="i-en">fine-tuning datasets</span><span class="i-ja">微調整データセット</span><small>chat / tool-trace / CoT</small></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="why">
+  <div class="container">
+    <h2><span class="i-en">Why this exists</span><span class="i-ja">なぜ作ったのか</span></h2>
+    <p class="sub"><span class="i-en">Manufacturing is where LLMs struggle most: CAD drawings, dense maintenance manuals, and failure knowledge locked in spreadsheets. Japanese factories in particular hold decades of primary data that never reaches the open web.</span><span class="i-ja">製造業はLLMが最も苦手とする領域です。CAD図面、高密度な保全マニュアル、そしてスプレッドシートに閉じ込められた不具合ナレッジ。特に日本の工場には、Web上に存在しない一次データが蓄積されています。</span></p>
+    <div class="grid g4">
+      <div class="card">
+        <h3><span class="i-en">LLMs are weak on manufacturing data</span><span class="i-ja">LLMは製造業データが苦手</span></h3>
+        <p><span class="i-en">CAD files, dense spec sheets, and failure logs are exactly the data that never made it into pretraining corpora.</span><span class="i-ja">CADファイル・高密度な仕様書・故障記録こそ、事前学習データに入り込まなかったデータです。</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="i-en">Failure knowledge is the missing stratum</span><span class="i-ja">不具合ナレッジという欠けていた地層</span></h3>
+        <p><span class="i-en">Most RAG retrieves manual text. Factory troubleshooting runs on symptom → cause → countermeasure records. PureStrata treats them as first-class structured data.</span><span class="i-ja">多くのRAGはマニュアル本文のみを検索します。工場のトラブルシューティングは「現象→原因→対策」の記録で回っています。PureStrataはそれを第一級の構造化データとして扱います。</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="i-en">Provenance is non-negotiable</span><span class="i-ja">出所証明は譲れない条件</span></h3>
+        <p><span class="i-en">Every record keeps its source file and locator, so any answer can be audited back to the drawing, section, or row it came from.</span><span class="i-ja">すべてのレコードが元ファイルと位置を保持し、回答がどの図面・セクション・行から来たか監査できます。</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="i-en">No lock-in</span><span class="i-ja">ロックインなし</span></h3>
+        <p><span class="i-en">The corpus is plain JSONL you own. Zero required dependencies. Runs locally, air-gap friendly, with Japanese search built in.</span><span class="i-ja">コーパスは自分のもののプレーンなJSONL。必須依存はゼロ。ローカル実行・エアギップ対応で、日本語検索も組み込み済みです。</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="records">
+  <div class="container">
+    <h2><span class="i-en">Three record families, first-class data</span><span class="i-ja">第一級データとして扱う3つのレコード族</span></h2>
+    <p class="sub"><span class="i-en">One schema (<code>purestrata/v1</code>) covers the documents a factory actually troubleshoots with. Every record carries provenance: source file plus locator.</span><span class="i-ja">工場の実務で使う文書を1つのスキーマ（<code>purestrata/v1</code>）で扱います。すべてのレコードに「元ファイル＋位置」の出所情報が付きます。</span></p>
+    <div class="grid g3">
+      <div class="card">
+        <h3><span class="i-en">Spec sheets &amp; manuals</span><span class="i-ja">仕様書・マニュアル</span></h3>
+        <div class="chips"><span class="chip">manual_section</span><span class="chip">procedure</span><span class="chip">safety_notice</span><span class="chip">part_record</span></div>
+        <p><span class="i-en">Chunked passages with section paths, ordered maintenance steps, severity-tagged warnings, and parts tables.</span><span class="i-ja">セクションパス付きのチャンク、順序付きの保全手順、重大度タグ付きの安全警告、部品表。</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="i-en">Drawings</span><span class="i-ja">図面</span></h3>
+        <div class="chips"><span class="chip">drawing</span></div>
+        <p><span class="i-en">ASCII DXF: title block, layers, annotations, hole diameters, fit callouts (e.g. <code>25 H7</code>), and size. STEP (AP203/214/242): products, assembly tree with quantities, units, cylindrical features, and size — read by a dependency-free parser.</span><span class="i-ja">ASCII DXF: タイトルブロック・レイヤー・注記・穴径・公差指示（例: <code>25 H7</code>）・サイズ。STEP（AP203/214/242）: 製品・数量付き組立ツリー・単位・円筒形状・サイズを、依存ゼロのパーサーで読み取ります。</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="i-en">Failure knowledge</span><span class="i-ja">不具合ナレッジ</span></h3>
+        <div class="chips"><span class="chip">failure_case</span></div>
+        <p><span class="i-en">Symptom, root cause, countermeasure, severity, and tags. Search past failures before the manual: troubleshooting-first retrieval.</span><span class="i-ja">現象・根本原因・対策・重大度・タグ。マニュアルの前に過去の不具合を検索する、トラブルシューティング優先の検索です。</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tools">
+  <div class="container">
+    <h2><span class="i-en">Ten tools, identical over every surface</span><span class="i-ja">どの経路でも同一の10ツール</span></h2>
+    <p class="sub"><span class="i-en">The same ten tools run over MCP, OpenAI-style tool calling, Anthropic schemas, the Python API, and the CLI. Your corpus stays local; results go back to the model with provenance.</span><span class="i-ja">同じ10ツールがMCP、OpenAI互換ツール呼び出し、Anthropicスキーマ、Python API、CLIで動きます。コーパスは手元に置いたまま、出所付きの結果だけがモデルに戻ります。</span></p>
+    <div class="tools">
+      <div class="tool"><code>list_corpus</code><span><span class="i-en">Inventory: record counts and loaded documents</span><span class="i-ja">レコード数と読み込み済み文書の一覧</span></span></div>
+      <div class="tool"><code>search_documents</code><span><span class="i-en">Ranked passage search, English and Japanese</span><span class="i-ja">英語・日本語対応のランキング検索</span></span></div>
+      <div class="tool"><code>get_safety_notices</code><span><span class="i-en">Warnings and cautions, optionally ranked</span><span class="i-ja">警告・注意の一覧（ランキング可能）</span></span></div>
+      <div class="tool"><code>get_procedure</code><span><span class="i-en">Full ordered steps of one procedure</span><span class="i-ja">1つの保全手順の全ステップ</span></span></div>
+      <div class="tool"><code>search_parts</code><span><span class="i-en">Parts lookup from parts lists</span><span class="i-ja">部品表からの部品検索</span></span></div>
+      <div class="tool"><code>list_drawings</code><span><span class="i-en">CAD inventory across DXF and STEP</span><span class="i-ja">DXF/STEP横断のCADインベントリ</span></span></div>
+      <div class="tool"><code>get_drawing</code><span><span class="i-en">Full drawing metadata by ID</span><span class="i-ja">IDで図面メタデータを取得</span></span></div>
+      <div class="tool"><code>search_drawings</code><span><span class="i-en">Geometry search: hole diameter (mm), fit class, material, format</span><span class="i-ja">穴径（mm）・公差クラス・材料・形式のジオメトリ検索</span></span></div>
+      <div class="tool"><code>search_failure_cases</code><span><span class="i-en">Troubleshooting first: match symptoms to past failures</span><span class="i-ja">過去の不具合との症状照合（トラブルシューティング優先）</span></span></div>
+      <div class="tool"><code>get_failure_case</code><span><span class="i-en">One full case by ID</span><span class="i-ja">IDで1件の不具合事例を取得</span></span></div>
+    </div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="container">
+    <h2><span class="i-en">Quickstart</span><span class="i-ja">クイックスタート</span></h2>
+    <p class="sub"><span class="i-en">Install, ingest, query like an LLM would, then export training data from the same corpus.</span><span class="i-ja">インストールして取り込み、LLMと同じ形式で検索し、同じコーパスから学習データを書き出します。</span></p>
+    <pre><code># install (Python 3.10+)
+uv add purestrata            # or: pip install purestrata
+
+# ingest drawings, spec sheets, and failure knowledge into a corpus
+purestrata ingest-manual manual.md --out corpus/
+purestrata ingest-dxf drawing.dxf --out corpus/
+purestrata ingest-step model.step --out corpus/
+purestrata ingest-failures failures.csv --out corpus/
+
+# query exactly the way an LLM would
+purestrata search "spindle vibration" --corpus corpus/
+purestrata call search_drawings '{"min_diameter": 24, "fit": "H7"}' --corpus corpus/
+
+# export fine-tuning datasets from the same corpus
+purestrata export chat       --corpus corpus/ --out dataset_chat.jsonl
+purestrata export tool_trace --corpus corpus/ --out dataset_tools.jsonl
+purestrata export cot        --corpus corpus/ --out dataset_cot.jsonl</code></pre>
+  </div>
+</section>
+
+<section id="integrations">
+  <div class="container">
+    <h2><span class="i-en">Works with any LLM</span><span class="i-ja">どのLLMとも連携</span></h2>
+    <p class="sub"><span class="i-en">No model is special. Register the MCP server, or pass the bundled schemas to an OpenAI-compatible API, or just use Python.</span><span class="i-ja">特定モデルへの依存はありません。MCPサーバーを登録するか、OpenAI互換APIにスキーマを渡すか、Pythonで直接使うか。</span></p>
+    <div class="split">
+      <div class="card">
+        <span class="tag">MCP</span>
+        <h3><span class="i-en">Any MCP client</span><span class="i-ja">任意のMCPクライアント</span></h3>
+        <p><span class="i-en">Claude Desktop, Claude Code, Factory Droid, Cursor, VS Code. No install needed with <code>uvx</code>:</span><span class="i-ja">Claude Desktop、Claude Code、Factory Droid、Cursor、VS Code。<code>uvx</code>ならインストール不要です:</span></p>
+        <pre><code>{
+  "mcpServers": {
+    "purestrata": {
+      "command": "uvx",
+      "args": ["--from", "purestrata[mcp]",
+               "purestrata", "serve",
+               "--corpus", "/abs/path/to/corpus"]
+    }
+  }
+}</code></pre>
+        <p><a href="https://github.com/daikiito-dk/PureStrata/blob/main/docs/MCP.md"><span class="i-en">Full setup guide (EN/JA) →</span><span class="i-ja">セットアップガイド（英/日）→</span></a></p>
+      </div>
+      <div class="card">
+        <span class="tag">Grok / OpenAI / local</span>
+        <h3><span class="i-en">OpenAI-compatible tool calling</span><span class="i-ja">OpenAI互換ツール呼び出し</span></h3>
+        <p><span class="i-en">Print the ready-made schemas, pass them to the chat completions endpoint, and execute returned tool calls locally. Your data never leaves your machine except to the endpoint you choose.</span><span class="i-ja">同梱のスキーマを出力してchat completionsエンドポイントに渡し、返ってきたツール呼び出しをローカルで実行します。選んだエンドポイント以外にデータは出ません。</span></p>
+        <pre><code>purestrata tools openai
+purestrata tools anthropic</code></pre>
+        <p><a href="https://github.com/daikiito-dk/PureStrata/blob/main/examples/api_tool_use.py"><span class="i-en">Runnable example →</span><span class="i-ja">実行例 →</span></a></p>
+      </div>
+      <div class="card">
+        <span class="tag">Python</span>
+        <h3><span class="i-en">Library API</span><span class="i-ja">ライブラリAPI</span></h3>
+        <pre><code>import purestrata as ps
+
+chunks = ps.ingest_manual("manual.md")
+chunks += ps.ingest_failures("failures.csv")
+ps.write_chunks(chunks, "corpus/", "my_doc")
+
+executor = ps.ToolExecutor(ps.Corpus.load("corpus/"))
+hits = executor.execute(
+    "search_failure_cases",
+    {"query": "spindle vibration", "top_k": 3},
+)</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="roadmap">
+  <div class="container">
+    <h2><span class="i-en">Status and roadmap</span><span class="i-ja">現状とロードマップ</span></h2>
+    <div class="split">
+      <div class="card">
+        <span class="tag" style="color:var(--green)"><span class="i-en">Current (v0.2.0)</span><span class="i-ja">現状（v0.2.0）</span></span>
+        <p><span class="i-en">Ingestion of Markdown, PDF, ASCII DXF, STEP (AP203/214/242), and CSV/JSONL failure logs. BM25 search with Japanese support. Drawing geometry search (hole diameter, fit class, material, CAD format). MCP server, OpenAI/Anthropic tool schemas, and chat / tool-trace / CoT fine-tune exports.</span><span class="i-ja">Markdown、PDF、ASCII DXF、STEP（AP203/214/242）、CSV/JSONL不具合ログの取り込み。日本語対応BM25検索。図面ジオメトリ検索（穴径・公差クラス・材料・CAD形式）。MCPサーバー、OpenAI/Anthropicツールスキーマ、chat / tool-trace / CoTの微調整書き出し。</span></p>
+      </div>
+      <div class="card">
+        <span class="tag"><span class="i-en">Planned</span><span class="i-ja">予定</span></span>
+        <ul class="planned">
+          <li><span class="i-en">HTML and DXF R2018 ingestion</span><span class="i-ja">HTML・DXF R2018の取り込み</span></li>
+          <li><span class="i-en">Per-layer geometry search</span><span class="i-ja">レイヤー単位のジオメトリ検索</span></li>
+          <li><span class="i-en">Embedding search</span><span class="i-ja">埋め込み（embedding）検索</span></li>
+          <li><span class="i-en">Evaluation harness for fine-tune sets</span><span class="i-ja">微調整データセットの評価ハーネス</span></li>
+          <li><span class="i-en">Hosted SaaS for teams: managed ingestion, access control, expert review workflows</span><span class="i-ja">チーム向けホスティングSaaS: 管理された取り込み、アクセス制御、専門家レビュー</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="container f">
+    <span>PureStrata · MIT License · © 2026 Daiki Ito</span>
+    <a href="https://github.com/daikiito-dk/PureStrata">GitHub</a>
+    <a href="https://pypi.org/project/purestrata/">PyPI</a>
+    <a href="https://github.com/daikiito-dk/PureStrata/blob/main/docs/MCP.md"><span class="i-en">MCP guide</span><span class="i-ja">MCPガイド</span></a>
+    <a href="https://github.com/daikiito-dk/PureStrata/issues"><span class="i-en">Issues</span><span class="i-ja">Issues</span></a>
+  </div>
+</footer>
+
+<script>
+(function () {
+  function setLang(lang) {
+    var ja = lang === 'ja';
+    document.documentElement.lang = ja ? 'ja' : 'en';
+    document.body.classList.toggle('lang-ja', ja);
+    document.body.classList.toggle('lang-en', !ja);
+    document.getElementById('btn-en').classList.toggle('active', !ja);
+    document.getElementById('btn-ja').classList.toggle('active', ja);
+    try { localStorage.setItem('purestrata-lang', ja ? 'ja' : 'en'); } catch (e) {}
+  }
+  window.setLang = setLang;
+  var saved = null;
+  try { saved = localStorage.getItem('purestrata-lang'); } catch (e) {}
+  var lang = saved || ((navigator.language || '').toLowerCase().indexOf('ja') === 0 ? 'ja' : 'en');
+  setLang(lang);
+})();
+</script>
+
+</body>
+</html>
