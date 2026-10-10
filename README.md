@@ -48,6 +48,7 @@ git clone https://github.com/daikiito-dk/PureStrata
 cd PureStrata
 make setup
 make demo          # ingest the bundled sample data, then search it
+make scenes        # SaaS-style walkthrough with a fictional machinery maker (examples/scenes/README.md)
 ```
 
 Or step by step:
@@ -241,6 +242,7 @@ git clone https://github.com/daikiito-dk/PureStrata
 cd PureStrata
 make setup
 make demo          # サンプルデータを取り込んで検索
+make scenes        # 架空の産業機械メーカーによるSaaSストーリーの通し実行（examples/scenes/README.md）
 
 # 手順で実行する場合
 purestrata ingest-manual examples/data/manuals/ja/cnc_press_maintenance.md --out corpus/

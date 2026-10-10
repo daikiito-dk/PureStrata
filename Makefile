@@ -1,4 +1,4 @@
-.PHONY: setup lint format test demo clean
+.PHONY: setup lint format test demo scenes clean
 
 PY := uv run
 
@@ -26,6 +26,9 @@ demo:
 	$(PY) purestrata inspect --corpus examples/corpus
 	$(PY) purestrata search "spindle vibration" --corpus examples/corpus
 	$(PY) purestrata search "ブレーキ" --corpus examples/corpus
+
+scenes:
+	$(PY) python examples/scenes/run_scenes.py
 
 clean:
 	rm -rf examples/corpus examples/output
