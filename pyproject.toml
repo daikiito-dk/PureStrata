@@ -1,6 +1,6 @@
 [project]
 name = "purestrata"
-version = "0.2.0"
+version = "0.3.0"
 description = "Open data layer for manufacturing AI: structure drawings, spec sheets, and failure knowledge into LLM tools and fine-tuning datasets."
 readme = "README.md"
 license = "MIT"

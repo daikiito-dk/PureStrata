@@ -42,7 +42,7 @@ from .types import (
     new_chunk,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "ALL_KINDS",
