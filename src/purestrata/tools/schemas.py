@@ -130,8 +130,9 @@ TOOLS: list[ToolSpec] = [
         name="search_failure_cases",
         description=(
             "Search past failure and defect knowledge: symptom, root cause, and "
-            "countermeasure. This is the first tool to use when troubleshooting an "
-            "equipment problem."
+            "countermeasure. Results include part records and drawings linked by an exact "
+            "part-number match, with ambiguous matches identified. This is the first tool "
+            "to use when troubleshooting an equipment problem."
         ),
         parameters={
             "type": "object",
@@ -164,6 +165,10 @@ TOOLS: list[ToolSpec] = [
                     "type": "string",
                     "description": "Optional text to rank by (part name, title, product).",
                 },
+                "layer": {
+                    "type": "string",
+                    "description": "Optional exact, case-insensitive DXF layer name filter.",
+                },
                 "min_diameter": {
                     "type": "number",
                     "description": "Minimum circular feature diameter in mm.",
@@ -192,7 +197,10 @@ TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         name="get_failure_case",
-        description="Get one full failure case (symptom, cause, countermeasure) by its ID.",
+        description=(
+            "Get one full failure case (symptom, cause, countermeasure) by its ID, including "
+            "parts and drawings linked by exact identifiers and any ambiguity flags."
+        ),
         parameters={
             "type": "object",
             "properties": {

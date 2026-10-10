@@ -27,6 +27,8 @@ MCP clients do not expand `~`. Use absolute paths for the corpus directory. GUI 
 
 The examples below use option A. For option B, set `"command"` to the absolute path of `purestrata` and `"args"` to `["serve", "--corpus", "/abs/path/to/corpus"]`.
 
+Optional hybrid search requires the `embeddings` extra and a SentenceTransformer model directory already present on the machine. Add `--embedding-model /abs/path/to/model --hybrid` to the server arguments. For `uvx`, request both extras as `"purestrata[mcp,embeddings]"`. BM25 remains the default; the model loader is configured for local files only and does not fetch model weights.
+
 ## 3. Register the server
 
 ### Claude Desktop
@@ -98,10 +100,11 @@ With the sample corpus loaded, ask your assistant:
 
 - "The LATHE MK3 vibrates at 5 mm/s during cutting. Check past failures and tell me the likely cause and countermeasure, with sources."
 - "Which drawings or models have a 25 mm hole? Which of them specify an H7 fit?"
+- "Find DXF drawings with a 25 mm hole on the PART-OUTLINE layer."
 - "List the safety precautions before replacing the brake unit on the servo press."
 - "プレスのブレーキ停止時間が悪化している。過去の不具合と点検手順を出典付きでまとめて。"
 
-Every tool result includes a `source` with the file path and locator, so the assistant can cite where each fact came from.
+Every tool result includes a `source` with the file path, locator, and source SHA-256 fingerprint. Where available, format-specific anchors identify manual line ranges, failure-log rows, or DXF/STEP entity IDs. The assistant can cite both the source revision and the evidence location. Failure-case results also include `related_records`: part records and drawings whose explicit part/drawing identifiers match the failure row's part number. Multiple exact matches are returned with an `ambiguous` flag; text similarity alone never creates a link.
 
 ## Troubleshooting
 
@@ -133,6 +136,8 @@ uvx purestrata ingest-failures path/to/failures.csv --out ~/purestrata-corpus
 
 MCP クライアントは `~` を展開しないため、コーパスのパスは絶対パスで書いてください。Claude Desktop などの GUI アプリはシェルの `PATH` を読まない場合があるため、コマンドも絶対パス（`which uvx` の結果）で指定するのが確実です。
 
+任意のハイブリッド検索には `embeddings` extra と、マシン上に事前配置した SentenceTransformer モデルディレクトリが必要です。サーバー引数に `--embedding-model /abs/path/to/model --hybrid` を追加してください。`uvx` では `"purestrata[mcp,embeddings]"` を指定します。既定はBM25検索で、モデルの重みをネットワークから取得しません。
+
 ### 3. クライアントに登録する
 
 英語版の手順 3 にある設定例（Claude Desktop、Claude Code、Factory Droid、Cursor、VS Code）は、そのまま使えます。パスだけ自分の環境に合わせて書き換えてください。
@@ -141,9 +146,10 @@ MCP クライアントは `~` を展開しないため、コーパスのパス�
 
 - 「LATHE MK3 が切削中に 5 mm/s で振動している。過去の不具合から原因と対策を出典付きで教えて」
 - 「25 mm の穴がある図面や3Dモデルはどれ？ H7 公差の指示があるのは？」
+- 「PART-OUTLINE レイヤーに 25 mm の穴があるDXF図面はどれ？」
 - 「サーボプレスのブレーキユニット交換前の安全上の注意を一覧にして」
 
-すべてのツール結果には、ファイルパスと位置情報を含む `source` が付きます。アシスタントは各情報の出典を示しながら回答できます。
+すべてのツール結果には、ファイルパス・位置情報・元ファイルのSHA-256指紋を含む `source` が付きます。取得できる場合は、マニュアルの行範囲、不具合ログの行、DXF/STEPのエンティティIDも示します。不具合記録の結果には `related_records` も含まれ、部品番号と明示的な識別子が一致する部品・図面を確認できます。一致候補が複数ある場合は `ambiguous` が付き、文章の類似だけで関連付けることはありません。
 
 ### うまく動かないとき
 

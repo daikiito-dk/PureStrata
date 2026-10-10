@@ -49,6 +49,13 @@ def test_load_missing_directory_raises(tmp_path):
         Corpus.load(tmp_path / "does_not_exist")
 
 
+def test_load_validates_hybrid_options(tmp_path):
+    with pytest.raises(ValueError, match="embedding_model"):
+        Corpus.load(tmp_path, hybrid_search=True)
+    with pytest.raises(ValueError, match="hybrid_search=True"):
+        Corpus.load(tmp_path, embedding_model=str(tmp_path))
+
+
 def test_rejects_foreign_schema(tmp_path):
     bad = tmp_path / "bad.strata.jsonl"
     bad.write_text(json.dumps({"schema": "other/v9", "chunk_id": "x"}) + "\n", encoding="utf-8")

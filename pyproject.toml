@@ -37,6 +37,7 @@ Repository = "https://github.com/daikiito-dk/PureStrata"
 [project.optional-dependencies]
 pdf = ["pypdf>=4.0"]
 mcp = ["mcp>=1.2"]
+embeddings = ["sentence-transformers>=3.0"]
 
 [project.scripts]
 purestrata = "purestrata.cli:main"

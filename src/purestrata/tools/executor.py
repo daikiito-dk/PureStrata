@@ -63,6 +63,85 @@ class ToolExecutor:
 
     def __init__(self, corpus: Corpus):
         self.corpus = corpus
+        self._parts_by_identifier: dict[str, list[Chunk]] = {}
+        for part in corpus.by_kind(PART_RECORD):
+            identifier = self._normalize_identifier(part.metadata.get("part_number"))
+            if identifier:
+                self._parts_by_identifier.setdefault(identifier, []).append(part)
+
+        self._drawings_by_identifier: dict[str, list[tuple[Chunk, list[dict]]]] = {}
+        for drawing in corpus.by_kind(DRAWING):
+            metadata = drawing.metadata
+            title_block = metadata.get("title_block") or {}
+            identifiers: dict[str, list[dict]] = {}
+            for key, value in (
+                ("drawing_id", metadata.get("drawing_id")),
+                ("dwg_no", title_block.get("dwg_no")),
+                ("part_no", title_block.get("part_no")),
+            ):
+                identifier = self._normalize_identifier(value)
+                if identifier:
+                    identifiers.setdefault(identifier, []).append({"field": key, "value": value})
+            for product in metadata.get("products") or []:
+                if not isinstance(product, dict):
+                    continue
+                value = product.get("id")
+                identifier = self._normalize_identifier(value)
+                if identifier:
+                    identifiers.setdefault(identifier, []).append(
+                        {"field": "product_id", "value": value}
+                    )
+            for identifier, matched_identifiers in identifiers.items():
+                self._drawings_by_identifier.setdefault(identifier, []).append(
+                    (drawing, matched_identifiers)
+                )
+
+    @staticmethod
+    def _normalize_identifier(value: Any) -> str:
+        """Normalize explicit part/drawing identifiers without fuzzy matching."""
+        return _as_str(value).casefold()
+
+    def _related_records(self, chunk: Chunk) -> dict:
+        """Find part and drawing records linked by an exact shared identifier."""
+        part_number = _as_str(chunk.metadata.get("part_number"))
+        identifier = self._normalize_identifier(part_number)
+        parts = []
+        drawings = []
+
+        if identifier:
+            for candidate in self._parts_by_identifier.get(identifier, []):
+                parts.append(
+                    {
+                        "part_number": candidate.metadata.get("part_number"),
+                        "name": candidate.metadata.get("name"),
+                        "chunk_id": candidate.chunk_id,
+                        "source": _source(candidate),
+                    }
+                )
+
+            for candidate, matched_identifiers in self._drawings_by_identifier.get(identifier, []):
+                drawings.append(
+                    {
+                        "drawing_id": candidate.metadata.get("drawing_id"),
+                        "cad_format": candidate.metadata.get("format", "dxf"),
+                        "chunk_id": candidate.chunk_id,
+                        "matched_identifiers": matched_identifiers,
+                        "source": _source(candidate),
+                    }
+                )
+
+        parts.sort(key=lambda record: record["chunk_id"])
+        drawings.sort(key=lambda record: record["chunk_id"])
+        return {
+            "identifier": part_number or None,
+            "parts": {"matches": parts, "ambiguous": len(parts) > 1},
+            "drawings": {"matches": drawings, "ambiguous": len(drawings) > 1},
+        }
+
+    def _failure_result(self, chunk: Chunk, score: float | None = None) -> dict:
+        result = _result(chunk, score)
+        result["related_records"] = self._related_records(chunk)
+        return result
 
     def execute(self, name: str, args: dict | None = None) -> dict:
         try:
@@ -104,7 +183,15 @@ class ToolExecutor:
         top_k = _clamp_top_k(args.get("top_k", 5), 5)
         kind = _as_str(args.get("kind")) or None
         results = self.corpus.search(query, kinds=kind, top_k=top_k)
-        return {"query": query, "results": [_result(chunk, score) for chunk, score in results]}
+        return {
+            "query": query,
+            "results": [
+                self._failure_result(chunk, score)
+                if chunk.kind == FAILURE_CASE
+                else _result(chunk, score)
+                for chunk, score in results
+            ],
+        }
 
     def _tool_get_safety_notices(self, args: dict) -> dict:
         top_k = _clamp_top_k(args.get("top_k", 10), 10)
@@ -161,6 +248,7 @@ class ToolExecutor:
 
     def _tool_search_drawings(self, args: dict) -> dict:
         query = _as_str(args.get("query"))
+        layer = _as_str(args.get("layer"))
         fit = _as_str(args.get("fit"))
         material = _as_str(args.get("material"))
         cad_format = _as_str(args.get("cad_format")).casefold()
@@ -181,6 +269,22 @@ class ToolExecutor:
             meta = chunk.metadata
             if cad_format and meta.get("format", "dxf") != cad_format:
                 continue
+            matched_layers = []
+            if layer:
+                layer_names = set((meta.get("per_layer_counts") or {}).keys())
+                if not layer_names:
+                    layer_names = {
+                        entry.get("name", "")
+                        for entry in meta.get("layers", [])
+                        if isinstance(entry, dict)
+                    }
+                matched_layers = sorted(
+                    name
+                    for name in layer_names
+                    if name and str(name).casefold() == layer.casefold()
+                )
+                if not matched_layers:
+                    continue
             if material:
                 haystack = meta.get("title_block", {}).get("material") or chunk.text
                 if material.casefold() not in haystack.casefold():
@@ -195,6 +299,8 @@ class ToolExecutor:
                 "circular_features": meta.get("circular_features", []),
                 "source": _source(chunk),
             }
+            if layer:
+                record["matched_layers"] = matched_layers
             if min_d is not None or max_d is not None:
                 matched = [
                     feature
@@ -221,6 +327,7 @@ class ToolExecutor:
             key: value
             for key, value in (
                 ("query", query),
+                ("layer", layer),
                 ("min_diameter", min_d),
                 ("max_diameter", max_d),
                 ("fit", fit),
@@ -253,11 +360,11 @@ class ToolExecutor:
                 ranked = [
                     (chunk, score) for chunk, score in ranked if chunk.chunk_id in candidate_ids
                 ]
-            results = [_result(chunk, score) for chunk, score in ranked[:top_k]]
+            results = [self._failure_result(chunk, score) for chunk, score in ranked[:top_k]]
             if not results and candidates:
-                results = [_result(chunk) for chunk in candidates[:top_k]]
+                results = [self._failure_result(chunk) for chunk in candidates[:top_k]]
         else:
-            results = [_result(chunk) for chunk in candidates[:top_k]]
+            results = [self._failure_result(chunk) for chunk in candidates[:top_k]]
         return {"query": query, "equipment": equipment, "results": results}
 
     def _tool_get_failure_case(self, args: dict) -> dict:
@@ -265,4 +372,4 @@ class ToolExecutor:
         if not case_id:
             raise ToolError("get_failure_case requires a 'case_id'.")
         chunk = self._find_by_id(case_id, FAILURE_CASE)
-        return _result(chunk)
+        return self._failure_result(chunk)

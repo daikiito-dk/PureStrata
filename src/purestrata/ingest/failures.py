@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 
 from ..pipeline.clean import clean_inline
-from ..types import FAILURE_CASE, Chunk, Provenance, derive_doc_id, new_chunk
+from ..types import FAILURE_CASE, Chunk, Provenance, derive_doc_id, new_chunk, sha256_file
 
 _COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
     "case_id": ("case_id", "id", "case", "no", "case_no", "件番", "ケース番号", "管理番号"),
@@ -89,6 +89,7 @@ def _value(row: dict, mapping: dict[str, str], field_name: str) -> str:
 def ingest_failures(path: str | Path, doc_id: str | None = None) -> list[Chunk]:
     """Parse a CSV or JSONL failure log into one chunk per incident."""
     path = Path(path)
+    source_sha256 = sha256_file(path)
     doc_id = doc_id or derive_doc_id(path)
     chunks: list[Chunk] = []
     for index, row in enumerate(_read_rows(path), start=1):
@@ -140,6 +141,12 @@ def ingest_failures(path: str | Path, doc_id: str | None = None) -> list[Chunk]:
         if tags:
             metadata["tags"] = tags
 
-        provenance = Provenance(doc_id=doc_id, source_path=str(path), locator=f"row {index}")
+        provenance = Provenance(
+            doc_id=doc_id,
+            source_path=str(path),
+            locator=f"row {index}",
+            source_sha256=source_sha256,
+            anchor={"record": index},
+        )
         chunks.append(new_chunk(FAILURE_CASE, text, provenance, metadata))
     return chunks

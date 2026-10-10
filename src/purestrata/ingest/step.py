@@ -14,7 +14,7 @@ from collections import Counter
 from pathlib import Path
 
 from ..pipeline.clean import clean_inline
-from ..types import DRAWING, Chunk, Provenance, derive_doc_id, new_chunk
+from ..types import DRAWING, Chunk, Provenance, derive_doc_id, new_chunk, sha256_file
 from .geometry import describe_circular_features, size_from_bounds, summarize_circular_features
 
 _ENTITY_RE = re.compile(r"^#(\d+)\s*=\s*(.*)$", re.S)
@@ -264,14 +264,14 @@ def parse_step(path: str | Path) -> dict:
 
     units = _detect_units(entities)
     cylinders = [
-        (float(args[2]) * 2, "")
-        for kind, args, _raw in entities.values()
+        (float(args[2]) * 2, "", f"#{entity_id}")
+        for entity_id, (kind, args, _raw) in entities.items()
         if kind == "CYLINDRICAL_SURFACE" and isinstance(_arg(args, 2), float)
     ]
     if not cylinders:
         cylinders = [
-            (float(args[2]) * 2, "")
-            for kind, args, _raw in entities.values()
+            (float(args[2]) * 2, "", f"#{entity_id}")
+            for entity_id, (kind, args, _raw) in entities.items()
             if kind == "CIRCLE" and isinstance(_arg(args, 2), float)
         ]
 
@@ -341,7 +341,16 @@ def ingest_step(path: str | Path, doc_id: str | None = None) -> list[Chunk]:
         "bounds": parsed["bounds"],
     }
     text = _model_text(drawing_id, path.name, parsed, title_block)
-    provenance = Provenance(doc_id=doc_id, source_path=str(path), locator="model")
+    entity_refs = sorted(
+        {ref for feature in parsed["circular_features"] for ref in feature.get("entity_refs", [])}
+    )
+    provenance = Provenance(
+        doc_id=doc_id,
+        source_path=str(path),
+        locator="model",
+        source_sha256=sha256_file(path),
+        anchor={"entity_refs": entity_refs} if entity_refs else None,
+    )
     return [new_chunk(DRAWING, text, provenance, metadata)]
 
 

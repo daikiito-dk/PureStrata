@@ -30,7 +30,13 @@ SYSTEM_PROMPT = (
 
 
 def _sources(chunk: Chunk) -> list[dict]:
-    return [chunk.provenance.to_dict()]
+    return [
+        {
+            **chunk.provenance.to_dict(),
+            "chunk_id": chunk.chunk_id,
+            "record_kind": chunk.kind,
+        }
+    ]
 
 
 def _failure_question(chunk: Chunk) -> str:

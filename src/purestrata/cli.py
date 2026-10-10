@@ -9,6 +9,9 @@ purestrata search "spindle vibration" --corpus corpus/
 purestrata call search_drawings '{"min_diameter": 24, "max_diameter": 26}' --corpus corpus/
 purestrata tools openai            # print tool schemas for Grok/OpenAI
 purestrata export cot --corpus corpus/ --out dataset.jsonl
+purestrata evaluate cot dataset.jsonl --out evaluation.json
+purestrata review create cot --corpus corpus/ --out review.jsonl
+purestrata review export-approved --bundle review.jsonl --out reviewed.jsonl
 purestrata serve --corpus corpus/  # MCP server over stdio
 """
 
@@ -57,6 +60,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--corpus", default="corpus", help="Corpus directory (default: ./corpus)")
     p.add_argument("--kind", choices=ALL_KINDS, help="Restrict search to one record kind")
     p.add_argument("--top-k", type=int, default=5)
+    p.add_argument("--embedding-model", help="Local SentenceTransformer model directory")
+    p.add_argument(
+        "--hybrid",
+        action="store_true",
+        help="Combine BM25 and local embedding search (requires --embedding-model)",
+    )
 
     p = sub.add_parser("inspect", help="Print corpus statistics")
     p.add_argument("--corpus", default="corpus", help="Corpus directory (default: ./corpus)")
@@ -70,13 +79,55 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", required=True, help="Output JSONL path")
     p.add_argument("--limit", type=int, help="Maximum number of records")
 
+    p = sub.add_parser("evaluate", help="Evaluate a fine-tuning dataset locally")
+    p.add_argument("format", choices=["chat", "tool_trace", "cot"])
+    p.add_argument("input", help="Fine-tuning JSONL path")
+    p.add_argument("--out", help="Optional machine-readable JSON report path")
+
+    p = sub.add_parser("review", help="Review training records offline")
+    review_sub = p.add_subparsers(dest="review_command", required=True)
+
+    create = review_sub.add_parser("create", help="Create a pending expert-review bundle")
+    create.add_argument("format", choices=["chat", "tool_trace", "cot"])
+    create.add_argument("--corpus", default="corpus", help="Corpus directory (default: ./corpus)")
+    create.add_argument("--out", required=True, help="Output review bundle JSONL path")
+    create.add_argument("--limit", type=int, help="Maximum number of records")
+
+    queue = review_sub.add_parser("list", help="List review IDs and statuses")
+    queue.add_argument("--bundle", required=True, help="Review bundle JSONL path")
+
+    show = review_sub.add_parser("show", help="Show one review record")
+    show.add_argument("review_id", help="Stable review sample ID from the bundle")
+    show.add_argument("--bundle", required=True, help="Review bundle JSONL path")
+
+    decide = review_sub.add_parser("decide", help="Approve, reject, or annotate one review sample")
+    decide.add_argument("review_id", help="Stable review sample ID from the bundle")
+    decide.add_argument("--bundle", required=True, help="Review bundle JSONL path")
+    decide.add_argument("--status", choices=["pending", "approved", "rejected"], required=True)
+    decide.add_argument("--reviewer", help="Reviewer name or identifier")
+    decide.add_argument("--notes", help="Reviewer notes")
+    decide.add_argument(
+        "--replacement-record",
+        help="JSON file containing the reviewed provider-format record; sources must be unchanged",
+    )
+
+    approved = review_sub.add_parser(
+        "export-approved", help="Export only approved records in the original format"
+    )
+    approved.add_argument("--bundle", required=True, help="Review bundle JSONL path")
+    approved.add_argument("--out", required=True, help="Output JSONL path")
+
     p = sub.add_parser("call", help="Call one tool locally and print its JSON result")
     p.add_argument("tool", help="Tool name, e.g. search_drawings")
     p.add_argument("arguments", nargs="?", default="{}", help="Tool arguments as a JSON object")
     p.add_argument("--corpus", default="corpus", help="Corpus directory (default: ./corpus)")
+    p.add_argument("--embedding-model", help="Local SentenceTransformer model directory")
+    p.add_argument("--hybrid", action="store_true", help="Enable local BM25 + embedding search")
 
     p = sub.add_parser("serve", help="Run the MCP server (stdio) over a corpus")
     p.add_argument("--corpus", default="corpus", help="Corpus directory (default: ./corpus)")
+    p.add_argument("--embedding-model", help="Local SentenceTransformer model directory")
+    p.add_argument("--hybrid", action="store_true", help="Enable local BM25 + embedding search")
     return parser
 
 
@@ -97,7 +148,7 @@ def _run_ingest(args: argparse.Namespace) -> int:
 
 
 def _run_search(args: argparse.Namespace) -> int:
-    corpus = Corpus.load(args.corpus)
+    corpus = _load_search_corpus(args)
     results = corpus.search(args.query, kinds=args.kind, top_k=args.top_k)
     if not results:
         print("No records matched.")
@@ -108,6 +159,18 @@ def _run_search(args: argparse.Namespace) -> int:
         print(f"   {preview}")
         print(f"   source: {chunk.provenance}")
     return 0
+
+
+def _load_search_corpus(args: argparse.Namespace) -> Corpus:
+    if args.hybrid and not args.embedding_model:
+        raise ValueError("--hybrid requires --embedding-model pointing to a local model directory.")
+    if args.embedding_model and not args.hybrid:
+        raise ValueError("--embedding-model requires --hybrid; BM25 remains the default.")
+    return Corpus.load(
+        args.corpus,
+        embedding_model=args.embedding_model,
+        hybrid_search=args.hybrid,
+    )
 
 
 def _run_export(args: argparse.Namespace) -> int:
@@ -130,6 +193,81 @@ def _run_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_evaluate(args: argparse.Namespace) -> int:
+    from .export.evaluation import evaluate_dataset, format_evaluation_summary
+
+    report = evaluate_dataset(args.input, args.format)
+    print(format_evaluation_summary(report))
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(report, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"JSON report -> {out_path}")
+    return 0
+
+
+def _run_review(args: argparse.Namespace) -> int:
+    from .export.finetune import (
+        build_chat_records,
+        build_cot_records,
+        build_tool_trace_records,
+        write_jsonl,
+    )
+    from .export.review import (
+        approved_records,
+        create_review_bundle,
+        decide_review,
+        get_review_entry,
+        list_review_queue,
+        write_review_bundle,
+    )
+
+    if args.review_command == "create":
+        builders = {
+            "chat": build_chat_records,
+            "tool_trace": build_tool_trace_records,
+            "cot": build_cot_records,
+        }
+        records = builders[args.format](Corpus.load(args.corpus), limit=args.limit)
+        bundle = create_review_bundle(args.format, records)
+        out_path = write_review_bundle(bundle, args.out)
+        print(f"Created {len(bundle)} pending {args.format} review records -> {out_path}")
+        return 0
+    if args.review_command == "list":
+        print(json.dumps(list_review_queue(args.bundle), indent=2, ensure_ascii=False))
+        return 0
+    if args.review_command == "show":
+        print(
+            json.dumps(
+                get_review_entry(args.bundle, args.review_id),
+                indent=2,
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+        return 0
+    if args.review_command == "decide":
+        path = decide_review(
+            args.bundle,
+            args.review_id,
+            args.status,
+            reviewer=args.reviewer,
+            notes=args.notes,
+            replacement_record_path=args.replacement_record,
+        )
+        print(f"Updated review {args.review_id} -> {args.status} in {path}")
+        return 0
+    if args.review_command == "export-approved":
+        records = approved_records(args.bundle)
+        out_path = write_jsonl(records, args.out)
+        print(f"Exported {len(records)} approved records -> {out_path}")
+        return 0
+    raise ValueError(f"Unknown review command: {args.review_command}")
+
+
 def _run_call(args: argparse.Namespace) -> int:
     from .tools import ToolExecutor
 
@@ -139,7 +277,7 @@ def _run_call(args: argparse.Namespace) -> int:
         raise ValueError(f"arguments must be a JSON object: {exc}") from exc
     if not isinstance(tool_args, dict):
         raise ValueError("arguments must be a JSON object")
-    result = ToolExecutor(Corpus.load(args.corpus)).execute(args.tool, tool_args)
+    result = ToolExecutor(_load_search_corpus(args)).execute(args.tool, tool_args)
     print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
     return 0
 
@@ -147,7 +285,11 @@ def _run_call(args: argparse.Namespace) -> int:
 def _run_serve(args: argparse.Namespace) -> int:
     from .mcp_server import serve
 
-    serve(args.corpus)
+    if args.hybrid and not args.embedding_model:
+        raise ValueError("--hybrid requires --embedding-model pointing to a local model directory.")
+    if args.embedding_model and not args.hybrid:
+        raise ValueError("--embedding-model requires --hybrid; BM25 remains the default.")
+    serve(args.corpus, embedding_model=args.embedding_model, hybrid_search=args.hybrid)
     return 0
 
 
@@ -172,6 +314,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "export":
             return _run_export(args)
+        if args.command == "evaluate":
+            return _run_evaluate(args)
+        if args.command == "review":
+            return _run_review(args)
         if args.command == "call":
             return _run_call(args)
         if args.command == "serve":

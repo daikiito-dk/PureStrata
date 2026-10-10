@@ -30,24 +30,33 @@ def to_mm(value: float, units: str) -> float | None:
     return round(value * factor, 4) if factor is not None else None
 
 
-def summarize_circular_features(items: list[tuple[float, str]], units: str) -> list[dict]:
+def summarize_circular_features(
+    items: list[tuple[float, str] | tuple[float, str, str | None]], units: str
+) -> list[dict]:
     """Group (diameter, layer) pairs into one entry per distinct diameter."""
     counts: dict[float, int] = defaultdict(int)
     layers: dict[float, set[str]] = defaultdict(set)
-    for diameter, layer in items:
+    entity_refs: dict[float, set[str]] = defaultdict(set)
+    for item in items:
+        diameter, layer = item[:2]
         key = round(diameter, 4)
         counts[key] += 1
         if layer:
             layers[key].add(layer)
-    return [
-        {
+        if len(item) > 2 and item[2]:
+            entity_refs[key].add(str(item[2]))
+    features = []
+    for diameter in sorted(counts):
+        feature = {
             "diameter": diameter,
             "diameter_mm": to_mm(diameter, units),
             "count": counts[diameter],
             "layers": sorted(layers[diameter]),
         }
-        for diameter in sorted(counts)
-    ]
+        if entity_refs[diameter]:
+            feature["entity_refs"] = sorted(entity_refs[diameter])
+        features.append(feature)
+    return features
 
 
 def parse_diameter_callouts(texts: list[str]) -> list[dict]:

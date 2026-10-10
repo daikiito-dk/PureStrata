@@ -7,11 +7,20 @@ datasets.
 """
 
 from .corpus import Corpus, write_chunks
+from .export.evaluation import evaluate_dataset, format_evaluation_summary
 from .export.finetune import (
     build_chat_records,
     build_cot_records,
     build_tool_trace_records,
     write_jsonl,
+)
+from .export.review import (
+    approved_records,
+    create_review_bundle,
+    decide_review,
+    get_review_entry,
+    list_review_queue,
+    write_review_bundle,
 )
 from .ingest.cad import ingest_dxf
 from .ingest.failures import ingest_failures
@@ -51,20 +60,28 @@ __all__ = [
     "ToolError",
     "ToolExecutor",
     "anthropic_tools",
+    "approved_records",
     "build_chat_records",
     "build_cot_records",
     "build_tool_trace_records",
+    "create_review_bundle",
+    "decide_review",
     "derive_doc_id",
+    "evaluate_dataset",
+    "format_evaluation_summary",
+    "get_review_entry",
     "has_cjk",
     "ingest_dxf",
     "ingest_failures",
     "ingest_manual",
     "ingest_step",
     "json_schemas",
+    "list_review_queue",
     "new_chunk",
     "openai_tools",
     "parse_step",
     "tokenize",
     "write_chunks",
     "write_jsonl",
+    "write_review_bundle",
 ]

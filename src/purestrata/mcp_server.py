@@ -79,6 +79,7 @@ def build_mcp_server(corpus: Corpus):
     @mcp.tool()
     def search_drawings(
         query: str | None = None,
+        layer: str | None = None,
         min_diameter: float | None = None,
         max_diameter: float | None = None,
         fit: str | None = None,
@@ -86,10 +87,11 @@ def build_mcp_server(corpus: Corpus):
         cad_format: str | None = None,
         top_k: int = 10,
     ) -> str:
-        """Find DXF drawings and STEP models by hole diameter (mm), fit class, material, format."""
+        """Find drawings by geometry, attributes, and exact case-insensitive DXF layer."""
         return run(
             "search_drawings",
             query=query,
+            layer=layer,
             min_diameter=min_diameter,
             max_diameter=max_diameter,
             fit=fit,
@@ -111,8 +113,17 @@ def build_mcp_server(corpus: Corpus):
     return mcp
 
 
-def serve(corpus_dir: str | Path) -> None:
-    """Load a corpus directory and run the MCP server over stdio."""
-    corpus = Corpus.load(corpus_dir)
+def serve(
+    corpus_dir: str | Path,
+    *,
+    embedding_model: str | Path | None = None,
+    hybrid_search: bool = False,
+) -> None:
+    """Load a corpus and run the MCP server over stdio."""
+    corpus = Corpus.load(
+        corpus_dir,
+        embedding_model=embedding_model,
+        hybrid_search=hybrid_search,
+    )
     mcp = build_mcp_server(corpus)
     mcp.run()

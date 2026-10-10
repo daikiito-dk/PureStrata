@@ -49,6 +49,15 @@ def make_chunk_id(doc_id: str, kind: str, locator: str) -> str:
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
+def sha256_file(path: str | Path) -> str:
+    """Return the SHA-256 fingerprint of a source file's exact bytes."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 @dataclass
 class Provenance:
     """Where a chunk came from, in a human-readable form."""
@@ -56,13 +65,20 @@ class Provenance:
     doc_id: str
     source_path: str
     locator: str
+    source_sha256: str | None = None
+    anchor: dict | None = None
 
     def to_dict(self) -> dict:
-        return {
+        data = {
             "doc_id": self.doc_id,
             "source_path": self.source_path,
             "locator": self.locator,
         }
+        if self.source_sha256 is not None:
+            data["source_sha256"] = self.source_sha256
+        if self.anchor is not None:
+            data["anchor"] = self.anchor
+        return data
 
     @classmethod
     def from_dict(cls, data: dict) -> Provenance:
@@ -70,6 +86,8 @@ class Provenance:
             doc_id=str(data["doc_id"]),
             source_path=str(data["source_path"]),
             locator=str(data["locator"]),
+            source_sha256=str(data["source_sha256"]) if data.get("source_sha256") else None,
+            anchor=dict(data["anchor"]) if data.get("anchor") is not None else None,
         )
 
     def __str__(self) -> str:

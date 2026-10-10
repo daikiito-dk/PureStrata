@@ -23,6 +23,7 @@ from ..types import (
     Provenance,
     derive_doc_id,
     new_chunk,
+    sha256_file,
 )
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
@@ -84,6 +85,8 @@ class _Block:
 class _Section:
     index: int
     title: str
+    start_line: int
+    end_line: int
     lines: list[str] = field(default_factory=list)
 
 
@@ -92,7 +95,12 @@ def ingest_manual(path: str | Path, doc_id: str | None = None) -> list[Chunk]:
     path = Path(path)
     doc_id = doc_id or derive_doc_id(path)
     raw = _read_text(path)
-    return _parse_markdown(raw, doc_id=doc_id, source_path=str(path))
+    return _parse_markdown(
+        raw,
+        doc_id=doc_id,
+        source_path=str(path),
+        source_sha256=sha256_file(path),
+    )
 
 
 def _read_text(path: Path) -> str:
@@ -178,7 +186,7 @@ def _map_part_columns(header: list[str]) -> dict[str, str]:
     return mapping
 
 
-def _parse_markdown(raw: str, doc_id: str, source_path: str) -> list[Chunk]:
+def _parse_markdown(raw: str, doc_id: str, source_path: str, source_sha256: str) -> list[Chunk]:
     lines = raw.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     chunks: list[Chunk] = []
     doc_meta: dict[str, str] = {}
@@ -194,27 +202,38 @@ def _parse_markdown(raw: str, doc_id: str, source_path: str) -> list[Chunk]:
         nonlocal current
         if current is None:
             return
-        chunks.extend(_chunks_from_section(current, doc_id, source_path, doc_meta))
+        chunks.extend(_chunks_from_section(current, doc_id, source_path, source_sha256, doc_meta))
         current = None
 
-    for line in lines:
+    for line_number, line in enumerate(lines, start=1):
         heading = _HEADING_RE.match(line)
         if heading:
             flush()
             if not title_stack and preamble:
                 section_counter += 1
                 front = _Section(
-                    index=section_counter, title="(front matter)", lines=list(preamble)
+                    index=section_counter,
+                    title="(front matter)",
+                    start_line=1,
+                    end_line=line_number - 1,
+                    lines=list(preamble),
                 )
                 preamble = []
-                chunks.extend(_chunks_from_section(front, doc_id, source_path, doc_meta))
+                chunks.extend(
+                    _chunks_from_section(front, doc_id, source_path, source_sha256, doc_meta)
+                )
             level = len(heading.group(1))
             title = _strip_md(heading.group(2))
             while len(title_stack) >= level:
                 title_stack.pop()
             title_stack.append(title)
             section_counter += 1
-            current = _Section(index=section_counter, title=full_title())
+            current = _Section(
+                index=section_counter,
+                title=full_title(),
+                start_line=line_number,
+                end_line=line_number,
+            )
             continue
         if current is None:
             front = _FRONT_MATTER_RE.match(line.strip())
@@ -224,13 +243,20 @@ def _parse_markdown(raw: str, doc_id: str, source_path: str) -> list[Chunk]:
                 preamble.append(line)
             continue
         current.lines.append(line)
+        current.end_line = line_number
 
     flush()
 
     if current is None and preamble and not chunks:
         section_counter += 1
-        front = _Section(index=section_counter, title="(front matter)", lines=preamble)
-        chunks.extend(_chunks_from_section(front, doc_id, source_path, doc_meta))
+        front = _Section(
+            index=section_counter,
+            title="(front matter)",
+            start_line=1,
+            end_line=len(lines),
+            lines=preamble,
+        )
+        chunks.extend(_chunks_from_section(front, doc_id, source_path, source_sha256, doc_meta))
     return chunks
 
 
@@ -243,7 +269,11 @@ def _doc_tags(doc_meta: dict[str, str]) -> dict:
 
 
 def _chunks_from_section(
-    section: _Section, doc_id: str, source_path: str, doc_meta: dict[str, str]
+    section: _Section,
+    doc_id: str,
+    source_path: str,
+    source_sha256: str,
+    doc_meta: dict[str, str],
 ) -> list[Chunk]:
     chunks: list[Chunk] = []
     base_locator = f"section {section.index}: {section.title}"
@@ -271,6 +301,7 @@ def _chunks_from_section(
                                 part_counter,
                                 doc_id,
                                 source_path,
+                                source_sha256,
                                 tags,
                             )
                         )
@@ -292,7 +323,14 @@ def _chunks_from_section(
                 procedure_counter += 1
                 chunks.append(
                     _procedure_chunk(
-                        steps, section, base_locator, procedure_counter, doc_id, source_path, tags
+                        steps,
+                        section,
+                        base_locator,
+                        procedure_counter,
+                        doc_id,
+                        source_path,
+                        source_sha256,
+                        tags,
                     )
                 )
                 continue
@@ -323,6 +361,7 @@ def _chunks_from_section(
                         notice_counter,
                         doc_id,
                         source_path,
+                        source_sha256,
                         tags,
                     )
                 )
@@ -342,7 +381,11 @@ def _chunks_from_section(
         for i, piece in enumerate(pieces, start=1):
             suffix = f" (part {i})" if len(pieces) > 1 else ""
             provenance = Provenance(
-                doc_id=doc_id, source_path=source_path, locator=f"{base_locator}{suffix}"
+                doc_id=doc_id,
+                source_path=source_path,
+                locator=f"{base_locator}{suffix}",
+                source_sha256=source_sha256,
+                anchor={"line_start": section.start_line, "line_end": section.end_line},
             )
             body = f"{section.title}\n{piece}" if section.title else piece
             chunks.append(
@@ -351,7 +394,9 @@ def _chunks_from_section(
     return chunks
 
 
-def _part_chunk(row, mapping, section, base_locator, number, doc_id, source_path, tags) -> Chunk:
+def _part_chunk(
+    row, mapping, section, base_locator, number, doc_id, source_path, source_sha256, tags
+) -> Chunk:
     def value(field_name: str) -> str:
         column = mapping.get(field_name)
         return _strip_md(row.get(column, "")) if column else ""
@@ -377,28 +422,50 @@ def _part_chunk(row, mapping, section, base_locator, number, doc_id, source_path
     if spec:
         metadata["spec"] = spec
     provenance = Provenance(
-        doc_id=doc_id, source_path=source_path, locator=f"{base_locator} > row {number}"
+        doc_id=doc_id,
+        source_path=source_path,
+        locator=f"{base_locator} > row {number}",
+        source_sha256=source_sha256,
+        anchor={
+            "line_start": section.start_line,
+            "line_end": section.end_line,
+            "table_row": number,
+        },
     )
     return new_chunk(PART_RECORD, text, provenance, metadata)
 
 
-def _procedure_chunk(steps, section, base_locator, number, doc_id, source_path, tags) -> Chunk:
+def _procedure_chunk(
+    steps, section, base_locator, number, doc_id, source_path, source_sha256, tags
+) -> Chunk:
     equipment = tags.get("equipment")
     scope = f" on {equipment}" if equipment else ""
     text = f"Procedure: {section.title}{scope}. Steps: "
     text += " ".join(f"({i}) {step}" for i, step in enumerate(steps, start=1))
     metadata = {"title": section.title, "steps": steps, **tags}
     provenance = Provenance(
-        doc_id=doc_id, source_path=source_path, locator=f"{base_locator} > procedure {number}"
+        doc_id=doc_id,
+        source_path=source_path,
+        locator=f"{base_locator} > procedure {number}",
+        source_sha256=source_sha256,
+        anchor={
+            "line_start": section.start_line,
+            "line_end": section.end_line,
+            "procedure": number,
+        },
     )
     return new_chunk(PROCEDURE, text, provenance, metadata)
 
 
 def _notice_chunk(
-    severity, body, section, base_locator, number, doc_id, source_path, tags
+    severity, body, section, base_locator, number, doc_id, source_path, source_sha256, tags
 ) -> Chunk:
     metadata = {"severity": severity, "section": section.title, **tags}
     provenance = Provenance(
-        doc_id=doc_id, source_path=source_path, locator=f"{base_locator} > notice {number}"
+        doc_id=doc_id,
+        source_path=source_path,
+        locator=f"{base_locator} > notice {number}",
+        source_sha256=source_sha256,
+        anchor={"line_start": section.start_line, "line_end": section.end_line, "notice": number},
     )
     return new_chunk(SAFETY_NOTICE, clean_inline(body), provenance, metadata)

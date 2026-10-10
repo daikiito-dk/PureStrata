@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from ..pipeline.clean import clean_inline
-from ..types import DRAWING, Chunk, Provenance, derive_doc_id, new_chunk
+from ..types import DRAWING, Chunk, Provenance, derive_doc_id, new_chunk, sha256_file
 from .geometry import (
     describe_circular_features,
     format_number,
@@ -108,6 +108,7 @@ def parse_dxf(path: str | Path) -> dict:
             if section == "ENTITIES":
                 current_entity = {
                     "type": marker,
+                    "handle": None,
                     "layer": "",
                     "texts": [],
                     "points": {},
@@ -133,7 +134,9 @@ def parse_dxf(path: str | Path) -> dict:
                 header_vars.setdefault(f"{current_var}:{code}", value.strip())
             continue
         if current_entity is not None:
-            if code == 8:
+            if code == 5:
+                current_entity["handle"] = value.strip()
+            elif code == 8:
                 current_entity["layer"] = value
             elif code in (1, 3):
                 current_entity["texts"].append(value)
@@ -172,7 +175,11 @@ def parse_dxf(path: str | Path) -> dict:
                     title_block.setdefault(_norm_key(match.group(1)), clean_inline(match.group(2)))
 
     circles = [
-        (entity["radius"] * 2, entity["layer"] or "0")
+        (
+            entity["radius"] * 2,
+            entity["layer"] or "0",
+            f"#{entity['handle']}" if entity["handle"] else None,
+        )
         for entity in entities
         if entity["type"] == "CIRCLE" and entity["radius"]
     ]
@@ -244,7 +251,16 @@ def ingest_dxf(path: str | Path, doc_id: str | None = None) -> list[Chunk]:
         "bounds": parsed["bounds"],
         "blocks": parsed["blocks"],
     }
-    provenance = Provenance(doc_id=doc_id, source_path=str(path), locator="drawing")
+    entity_refs = sorted(
+        {ref for feature in parsed["circular_features"] for ref in feature.get("entity_refs", [])}
+    )
+    provenance = Provenance(
+        doc_id=doc_id,
+        source_path=str(path),
+        locator="drawing",
+        source_sha256=sha256_file(path),
+        anchor={"entity_refs": entity_refs} if entity_refs else None,
+    )
     return [new_chunk(DRAWING, text, provenance, metadata)]
 
 

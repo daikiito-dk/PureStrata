@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-from purestrata import has_cjk, tokenize
+import importlib.util
+
+import pytest
+
+from purestrata import Corpus, has_cjk, tokenize
 from purestrata.pipeline import split_long_text
+from purestrata.search import load_local_embedding_encoder
+from purestrata.types import MANUAL_SECTION, Chunk, Provenance
 
 
 def test_tokenize_latin():
@@ -67,3 +73,70 @@ def test_search_kind_filter(corpus):
 
 def test_search_no_match_returns_empty(corpus):
     assert corpus.search("turbine governor") == []
+
+
+def _semantic_chunks():
+    return [
+        Chunk(
+            chunk_id="shaft-record",
+            kind=MANUAL_SECTION,
+            text="motor shaft makes loud noise",
+            provenance=Provenance("manual", "manual.md", "section 1"),
+        ),
+        Chunk(
+            chunk_id="coolant-record",
+            kind=MANUAL_SECTION,
+            text="coolant concentration is low",
+            provenance=Provenance("manual", "manual.md", "section 2"),
+        ),
+    ]
+
+
+def test_hybrid_search_finds_semantic_match_without_bm25_overlap():
+    vectors = {
+        "motor shaft makes loud noise": [1.0, 0.0],
+        "coolant concentration is low": [0.0, 1.0],
+        "journal bearing fault": [0.99, 0.1],
+    }
+    corpus = Corpus(
+        _semantic_chunks(),
+        embedding_encoder=lambda texts: [vectors[text] for text in texts],
+        hybrid_search=True,
+    )
+
+    assert corpus.search("journal bearing fault", hybrid=False) == []
+    results = corpus.search("journal bearing fault")
+    assert results[0][0].chunk_id == "shaft-record"
+    assert results[0][1] > 0
+
+
+def test_hybrid_search_is_opt_in_and_requires_encoder():
+    corpus = Corpus(_semantic_chunks())
+    assert corpus.search("motor shaft")
+    with pytest.raises(ValueError, match="requires a local embedding encoder"):
+        corpus.search("unrelated semantic question", hybrid=True)
+
+
+def test_hybrid_search_rejects_embedding_dimension_mismatch():
+    calls = 0
+
+    def encoder(texts):
+        nonlocal calls
+        calls += 1
+        return [[1.0, 0.0] for _text in texts] if calls == 1 else [[1.0]]
+
+    corpus = Corpus(_semantic_chunks(), embedding_encoder=encoder)
+    with pytest.raises(ValueError, match="dimensions do not match"):
+        corpus.search("query", hybrid=True)
+
+
+def test_local_encoder_requires_existing_model_directory(tmp_path):
+    with pytest.raises(FileNotFoundError, match="Local embedding model not found"):
+        load_local_embedding_encoder(tmp_path / "missing-model")
+
+
+def test_local_encoder_requires_embeddings_extra(tmp_path):
+    if importlib.util.find_spec("sentence_transformers") is not None:
+        pytest.skip("sentence-transformers is installed; the ImportError path is unreachable")
+    with pytest.raises(RuntimeError, match="embeddings' extra"):
+        load_local_embedding_encoder(tmp_path)
