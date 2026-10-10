@@ -134,6 +134,8 @@ Your corpus is queried locally; results go back to the model with provenance.
 
 Step-by-step setup for Claude Desktop, Claude Code, Factory Droid, Cursor, and VS Code, with example prompts and troubleshooting: **[docs/MCP.md](docs/MCP.md)**.
 
+**LlamaIndex / distilabel** — optional adapters keep provenance intact: retrieve from a PureStrata corpus inside LlamaIndex, or feed reviewed records into distilabel pipelines. Setup and supported versions: **[docs/ADAPTERS.md](docs/ADAPTERS.md)**.
+
 **Python API** — the same tools as a library:
 
 ```python
@@ -195,7 +197,7 @@ Review bundles start as `pending` and retain source provenance. Approve/reject d
 
 ## Status and roadmap
 
-Current: local ingestion (Markdown, PDF, ASCII DXF, STEP AP203/AP214/AP242, CSV/JSONL), BM25 search with Japanese support, optional local hybrid semantic search, geometry search over drawings (hole diameter, fit class, material, CAD format, DXF layer), MCP server, tool schemas, fine-tune exports, offline dataset evaluation, and expert review with approved-only exports.
+Current: local ingestion (Markdown, PDF, ASCII DXF, STEP AP203/AP214/AP242, CSV/JSONL), BM25 search with Japanese support, optional local hybrid semantic search, geometry search over drawings (hole diameter, fit class, material, CAD format, DXF layer), MCP server, tool schemas, fine-tune exports, offline dataset evaluation, expert review with approved-only exports, and optional LlamaIndex/distilabel adapters.
 
 Planned: HTML/DXF-R2018 support, and a hosted SaaS for teams that need managed ingestion, access control, and shared expert-review workflows.
 
@@ -226,6 +228,7 @@ PureStrata は製造業AIのためのオープンなデータレイヤーです�
 - **3つのレコード族を第一級データとして扱う**: 仕様書（`manual_section` / `procedure` / `safety_notice` / `part_record`）、図面（DXF・STEP：タイトルブロック、レイヤー、注記、穴径・公差クラス、組立構成）、不具合ナレッジ（現象→原因→対策）。特に「不具合ナレッジ」は通常のRAGには欠けている層で、工場のトラブルシューティングの中核です。
 - **図面ジオメトリ検索**: `search_drawings` で穴径範囲（mm）・公差クラス（H7等）・材料・CAD形式（DXF/STEP）を横断して絞り込めます。DXFはレイヤー名でも検索できます。
 - **任意のローカルハイブリッド検索**: `purestrata[embeddings]` と事前配置したモデルを指定した場合だけ、BM25と意味検索を併用できます。既定の検索は引き続き依存ゼロのBM25です。
+- **オプションのフレームワークアダプター**: `purestrata[llamaindex]` でLlamaIndexリトリーバーとして、`purestrata[distilabel]` でdistilabelパイプラインへの取り込みに対応します。出所情報は列として保持されます（[docs/ADAPTERS.md](docs/ADAPTERS.md)）。
 - **出所証明**: すべてのレコードが元ファイル・SHA-256指紋・位置情報を保持します。形式に応じてマニュアルの行範囲、不具合ログの行、DXF/STEPのエンティティ参照も記録し、回答の根拠を元ファイルの版と証拠まで追跡できます。
 - **ロックインなし**: コーパスはプレーンなJSONL。コアは依存ゼロ。ローカル実行でエアギップ環境にも対応します。
 - **日本語対応検索**: 依存ゼロのBM25実装がCJKバイグラム解析に対応し、日本語の不具合記録もそのまま検索できます。
