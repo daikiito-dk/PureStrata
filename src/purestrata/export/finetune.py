@@ -22,6 +22,7 @@ from pathlib import Path
 from ..corpus import Corpus
 from ..tools.executor import ToolError, ToolExecutor
 from ..types import FAILURE_CASE, PROCEDURE, SAFETY_NOTICE, Chunk
+from ._io import write_lines_atomic
 
 SYSTEM_PROMPT = (
     "You are a manufacturing maintenance assistant. Answer using verified maintenance "
@@ -210,11 +211,10 @@ def build_cot_records(corpus: Corpus, limit: int | None = None) -> list[dict]:
 
 
 def write_jsonl(records: list[dict], out_path: str | Path) -> Path:
-    """Write records as JSONL and return the path."""
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as handle:
-        for record in records:
-            handle.write(json.dumps(record, ensure_ascii=False, default=str))
-            handle.write("\n")
-    return out_path
+    """Write records as JSONL atomically and return the path.
+
+    The write goes through a temporary file and rename, so an interrupted
+    export never replaces a good dataset with a truncated one.
+    """
+    lines = [json.dumps(record, ensure_ascii=False, default=str) for record in records]
+    return write_lines_atomic(out_path, lines)

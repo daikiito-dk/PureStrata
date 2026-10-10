@@ -26,9 +26,9 @@ retriever = PureStrataRetriever(corpus, top_k=5)
 nodes = retriever.retrieve("journal bearing fault")
 
 node = nodes[0].node
-node.id_                       # the PureStrata chunk ID
-node.metadata["kind"]          # record kind
-node.metadata["provenance"]   # source file, locator, SHA-256 fingerprint, anchor
+node.id_  # the PureStrata chunk ID
+node.metadata["kind"]  # record kind
+node.metadata["provenance"]  # source file, locator, SHA-256 fingerprint, anchor
 ```
 
 Plug it into a query engine:
@@ -126,9 +126,9 @@ retriever = PureStrataRetriever(corpus, top_k=5)
 nodes = retriever.retrieve("ジャーナル軸受の異音")
 
 node = nodes[0].node
-node.id_                       # PureStrataのチャンクID
-node.metadata["kind"]          # レコード種別
-node.metadata["provenance"]    # 元ファイル・位置情報・SHA-256指紋・アンカー
+node.id_  # PureStrataのチャンクID
+node.metadata["kind"]  # レコード種別
+node.metadata["provenance"]  # 元ファイル・位置情報・SHA-256指紋・アンカー
 ```
 
 - `kinds` は `Corpus.search` と同じくレコード種別で絞り込みます。

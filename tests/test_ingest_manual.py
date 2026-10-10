@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from purestrata import ingest_manual
 from purestrata.types import MANUAL_SECTION, PART_RECORD, PROCEDURE, SAFETY_NOTICE
 
@@ -104,3 +106,11 @@ def test_deterministic_chunk_ids(en_manual):
     first = ingest_manual(en_manual)
     second = ingest_manual(en_manual)
     assert [c.chunk_id for c in first] == [c.chunk_id for c in second]
+
+
+def test_ingest_manual_rejects_unreadable_pdf(tmp_path):
+    pytest.importorskip("pypdf")
+    path = tmp_path / "broken.pdf"
+    path.write_bytes(b"not a pdf at all, just bytes")
+    with pytest.raises(ValueError, match="Could not read PDF"):
+        ingest_manual(path)

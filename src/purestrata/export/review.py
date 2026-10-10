@@ -1,13 +1,23 @@
-"""Offline review bundles for fine-tuning records."""
+"""Offline review bundles for fine-tuning records.
+
+Integrity model: every entry carries a SHA-256 hash of its record and of
+its review state (status, reviewer, notes, timestamp), so accidental
+corruption and partial hand edits are detected on load, and approvals
+without a reviewer decision are refused at export time. The hashes are
+unkeyed and stored next to the data, so they do not stop a deliberate
+attacker who can rewrite the file and recompute them. Where that threat
+matters, protect the bundle with filesystem permissions or an external
+signature/manifest.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
-import os
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+
+from ._io import write_lines_atomic
 
 REVIEW_STATUSES = {"pending", "approved", "rejected"}
 REVIEW_FORMATS = {"chat", "tool_trace", "cot"}
@@ -16,6 +26,22 @@ REVIEW_FORMATS = {"chat", "tool_trace", "cot"}
 def _record_sha256(record: dict) -> str:
     payload = json.dumps(
         record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _entry_state_sha256(entry: dict) -> str:
+    """Hash the review state (record + status + review) of one entry."""
+    payload = json.dumps(
+        {
+            "record": entry["record"],
+            "status": entry["status"],
+            "review": entry.get("review"),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -65,16 +91,16 @@ def create_review_bundle(format_name: str, records: list[dict]) -> list[dict]:
         review_id = hashlib.sha256(
             f"{format_name}:{record_hash}:{occurrences[record_hash]}".encode()
         ).hexdigest()[:24]
-        bundle.append(
-            {
-                "review_id": review_id,
-                "format": format_name,
-                "status": "pending",
-                "record_sha256": record_hash,
-                "record": record,
-                "review": {"reviewer": None, "notes": None, "decided_at": None},
-            }
-        )
+        bundle_entry = {
+            "review_id": review_id,
+            "format": format_name,
+            "status": "pending",
+            "record_sha256": record_hash,
+            "record": record,
+            "review": {"reviewer": None, "notes": None, "decided_at": None},
+        }
+        bundle_entry["state_sha256"] = _entry_state_sha256(bundle_entry)
+        bundle.append(bundle_entry)
     return bundle
 
 
@@ -142,36 +168,18 @@ def _verify_record_integrity(entry: dict) -> None:
         raise ValueError(
             f"Review record {entry['review_id']} was modified without a review decision."
         )
-
-
-def _write_atomic(path: Path, lines: list[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            newline="",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as handle:
-            temp_path = Path(handle.name)
-            for line in lines:
-                handle.write(line)
-                handle.write("\n")
-        os.replace(temp_path, path)
-    finally:
-        if temp_path is not None and temp_path.exists():
-            temp_path.unlink()
+    state_hash = entry.get("state_sha256")
+    if state_hash is not None and state_hash != _entry_state_sha256(entry):
+        raise ValueError(
+            f"Review state of {entry['review_id']} was modified outside decide_review."
+        )
 
 
 def write_review_bundle(bundle: list[dict], out_path: str | Path) -> Path:
     """Write a review bundle as UTF-8 JSONL."""
     path = Path(out_path)
     lines = [json.dumps(entry, ensure_ascii=False, default=str) for entry in bundle]
-    _write_atomic(path, lines)
+    write_lines_atomic(path, lines)
     return path
 
 
@@ -215,6 +223,7 @@ def decide_review(
     if notes is not None:
         review["notes"] = notes
     review["decided_at"] = datetime.now(timezone.utc).isoformat()
+    target["state_sha256"] = _entry_state_sha256(target)
     write_review_bundle(entries, path)
     return path
 
@@ -224,6 +233,14 @@ def approved_records(bundle_path: str | Path) -> list[dict]:
     records = []
     for entry in _load_review_bundle(bundle_path):
         _verify_record_integrity(entry)
-        if entry["status"] == "approved":
-            records.append(entry["record"])
+        if entry["status"] != "approved":
+            continue
+        # Re-apply the approval rule on read: decide_review requires a
+        # reviewer, and a hand-edited file must not be able to skip that.
+        review = entry.get("review") or {}
+        if not review.get("reviewer") or not review.get("decided_at"):
+            raise ValueError(
+                f"Approved review {entry['review_id']} has no reviewer decision on record."
+            )
+        records.append(entry["record"])
     return records

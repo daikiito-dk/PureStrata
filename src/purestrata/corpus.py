@@ -24,7 +24,9 @@ def write_chunks(chunks: list[Chunk], out_dir: str | Path, doc_id: str) -> Path:
     out_path = out_dir / f"{doc_id}{CORPUS_SUFFIX}"
     with open(out_path, "w", encoding="utf-8") as handle:
         for chunk in chunks:
-            handle.write(json.dumps(chunk.to_dict(), ensure_ascii=False))
+            # allow_nan=False keeps non-standard Infinity/NaN literals out of
+            # the JSONL so strict parsers downstream never see them.
+            handle.write(json.dumps(chunk.to_dict(), ensure_ascii=False, allow_nan=False))
             handle.write("\n")
     return out_path
 

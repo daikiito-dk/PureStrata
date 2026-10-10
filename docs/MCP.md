@@ -106,6 +106,46 @@ With the sample corpus loaded, ask your assistant:
 
 Every tool result includes a `source` with the file path, locator, and source SHA-256 fingerprint. Where available, format-specific anchors identify manual line ranges, failure-log rows, or DXF/STEP entity IDs. The assistant can cite both the source revision and the evidence location. Failure-case results also include `related_records`: part records and drawings whose explicit part/drawing identifiers match the failure row's part number. Multiple exact matches are returned with an `ambiguous` flag; text similarity alone never creates a link.
 
+## 5. Remote MCP (Streamable HTTP)
+
+For teams, the same server also speaks Streamable HTTP with bearer-token authentication. Local stdio stays the default; the corpus still never leaves the machine that serves it.
+
+```bash
+export PURESTRATA_TOKEN="$(openssl rand -hex 32)"
+purestrata serve --corpus /abs/path/to/corpus --transport http --host 127.0.0.1 --port 8000
+```
+
+- The token is read from `--token` or `PURESTRATA_TOKEN`; HTTP transport refuses to start without one.
+- The default bind is `127.0.0.1`. Put the server behind TLS before exposing it, for example with Caddy:
+
+```caddy
+mcp.example.com {
+    reverse_proxy 127.0.0.1:8000
+}
+```
+
+Clients that support remote MCP register a URL and, with static tokens, send the header themselves:
+
+```json
+{
+  "mcpServers": {
+    "purestrata": {
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer <PURESTRATA_TOKEN>" }
+    }
+  }
+}
+```
+
+### OAuth architecture (design)
+
+PureStrata is a pure **OAuth resource server**: it validates bearer tokens and never issues them (RFC 9728 protected-resource metadata is advertised automatically).
+
+- **Self-hosting (static token):** one pre-shared token, validated in constant time. Rotate by restarting with a new value. Set `--authorization-server-url` if an authorization server exists; clients doing OAuth discovery will follow it.
+- **Hosted SaaS:** the control plane runs the authorization server (authorization code + PKCE, RFC 8414 metadata, JWKS). Its verifier validates short-lived tokens against the JWKS endpoint instead of a static token, and every request is tied to the reviewer identity used in audit logs. See [docs/SAAS.md](SAAS.md).
+
+Security notes: prefer the environment variable over the command line so the token does not land in shell history or the process list (`--token` prints a warning for this reason); use a token of at least 16 random characters (`openssl rand -hex 32`) — shorter ones trigger a startup warning; keep the loopback bind unless a reverse proxy fronts the server (binding a non-loopback address over plaintext HTTP prints a warning, because the token and every response would cross the network unencrypted); failed token checks are logged (without the token itself), and a reverse proxy should also rate-limit requests to slow down online guessing; air-gapped stdio workflows are unaffected.
+
 ## Troubleshooting
 
 - **The server does not appear or fails to start.** Run the exact command in a terminal. `purestrata serve` should start and wait silently for input; press Ctrl+C to stop it. An error such as `Corpus directory not found` means the path is wrong.
@@ -150,6 +190,23 @@ MCP クライアントは `~` を展開しないため、コーパスのパス�
 - 「サーボプレスのブレーキユニット交換前の安全上の注意を一覧にして」
 
 すべてのツール結果には、ファイルパス・位置情報・元ファイルのSHA-256指紋を含む `source` が付きます。取得できる場合は、マニュアルの行範囲、不具合ログの行、DXF/STEPのエンティティIDも示します。不具合記録の結果には `related_records` も含まれ、部品番号と明示的な識別子が一致する部品・図面を確認できます。一致候補が複数ある場合は `ambiguous` が付き、文章の類似だけで関連付けることはありません。
+
+### 5. リモートMCP（Streamable HTTP）
+
+チーム向けに、同じサーバーがベアラートークン認証付きの Streamable HTTP でも動きます。既定の stdio（ローカル）は変わりません。コーパスはサーバーを動かすマシンから出ません。
+
+```bash
+export PURESTRATA_TOKEN="$(openssl rand -hex 32)"
+purestrata serve --corpus /abs/path/to/corpus --transport http --host 127.0.0.1 --port 8000
+```
+
+- トークンは `--token` または環境変数 `PURESTRATA_TOKEN` から読みます。HTTP ではトークンなしでは起動しません。
+- 既定のバインドは `127.0.0.1` です。外部に出す場合は必ずリバースプロキシでTLSを終端してください（Caddy なら `reverse_proxy 127.0.0.1:8000` の1行）。
+- リモートMCP対応クライアントは URL とヘッダーで登録します: `"url": "https://mcp.example.com/mcp", "headers": {"Authorization": "Bearer <token>"}`
+
+**OAuth設計**: PureStrataは純粋な OAuth リソースサーバーです（RFC 9728 の保護リソースメタデータを自動公開）。トークンを検証するだけで発行はしません。セルフホストは事前共有トークン（定数時間比較、再起動でローテーション）。ホスティングSaaSではコントロールプレーンが認可サーバー（認可コード + PKCE、RFC 8414、JWKS）を担い、静的トークンの代わりに短命トークンをJWKSで検証します。詳細は [docs/SAAS.md](SAAS.md)。
+
+運用上の注意: シェル履歴やプロセス一覧に残さないためコマンドラインより環境変数を推奨します（`--token` 使用時は警告を表示）。トークンは16文字以上の乱数にしてください（`openssl rand -hex 32`。短い場合は起動時に警告）。リバースプロキシなしならループバックのままにしてください（ループバック以外への平文HTTPバインドは警告を表示。トークンと応答が暗号化されずにネットワークを流れるため）。認証失敗はトークン自体を含めずにログ出力します。オンライン総当たり対策として、リバースプロキシ側でレート制限も設定してください。エアギャップの stdio 運用には影響しません。
 
 ### うまく動かないとき
 

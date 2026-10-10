@@ -58,6 +58,23 @@ def sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
+MAX_INGEST_BYTES = 256 * 1024 * 1024
+
+
+def ensure_ingest_size(path: str | Path, max_bytes: int | None = None) -> None:
+    """Refuse to ingest files above a size limit.
+
+    Adapters read whole files into memory, so one hostile or broken file
+    could otherwise exhaust the host. Pass ``max_bytes`` to override the
+    default for legitimately large drawings or models.
+    """
+    path = Path(path)
+    limit = MAX_INGEST_BYTES if max_bytes is None else max_bytes
+    size = path.stat().st_size
+    if size > limit:
+        raise ValueError(f"Refusing to ingest {path}: {size} bytes exceeds the {limit}-byte limit.")
+
+
 @dataclass
 class Provenance:
     """Where a chunk came from, in a human-readable form."""

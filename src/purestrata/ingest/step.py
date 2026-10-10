@@ -14,7 +14,15 @@ from collections import Counter
 from pathlib import Path
 
 from ..pipeline.clean import clean_inline
-from ..types import DRAWING, Chunk, Provenance, derive_doc_id, new_chunk, sha256_file
+from ..types import (
+    DRAWING,
+    Chunk,
+    Provenance,
+    derive_doc_id,
+    ensure_ingest_size,
+    new_chunk,
+    sha256_file,
+)
 from .geometry import describe_circular_features, size_from_bounds, summarize_circular_features
 
 _ENTITY_RE = re.compile(r"^#(\d+)\s*=\s*(.*)$", re.S)
@@ -110,10 +118,17 @@ def decode_string(raw: str) -> str:
     return text.replace("\\\\", "\\")
 
 
-def _parse_value(token: str):
+_MAX_PARSE_DEPTH = 64
+_MAX_ENTITY_ID_DIGITS = 18
+
+
+def _parse_value(token: str, _depth: int = 0):
     token = token.strip()
     if not token or token in ("$", "*"):
         return None
+    if _depth > _MAX_PARSE_DEPTH:
+        # Bound recursion on crafted inputs like deeply nested parentheses.
+        return token
     if token.startswith("'"):
         return decode_string(token)
     if token.startswith("#"):
@@ -122,7 +137,7 @@ def _parse_value(token: str):
         except ValueError:
             return token
     if token.startswith("("):
-        return [_parse_value(part) for part in _split_args(token[1:-1])]
+        return [_parse_value(part, _depth + 1) for part in _split_args(token[1:-1])]
     if token.startswith(".") and token.endswith("."):
         return token
     try:
@@ -132,7 +147,7 @@ def _parse_value(token: str):
     typed = _SIMPLE_RE.match(token)
     if typed:
         inner = _split_args(typed.group(2))
-        return _parse_value(inner[0]) if len(inner) == 1 else token
+        return _parse_value(inner[0], _depth + 1) if len(inner) == 1 else token
     return token
 
 
@@ -170,7 +185,11 @@ def _read_sections(path: Path) -> tuple[dict[str, list], dict[int, tuple[str, li
             match = _ENTITY_RE.match(statement)
             if not match:
                 continue
-            entity_id = int(match.group(1))
+            digits = match.group(1)
+            if len(digits) > _MAX_ENTITY_ID_DIGITS:
+                # Absurdly long ids overflow Python's int digit limit; skip.
+                continue
+            entity_id = int(digits)
             body = match.group(2).strip()
             simple = _SIMPLE_RE.match(body)
             if simple and not body.startswith("("):
@@ -223,6 +242,7 @@ def _header_info(header: dict[str, list]) -> dict:
 def parse_step(path: str | Path) -> dict:
     """Parse a STEP Part 21 file into a metadata summary."""
     path = Path(path)
+    ensure_ingest_size(path)
     header, entities = _read_sections(path)
 
     products: dict[int, dict] = {}

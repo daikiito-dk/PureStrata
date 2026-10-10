@@ -14,7 +14,15 @@ import re
 from pathlib import Path
 
 from ..pipeline.clean import clean_inline
-from ..types import FAILURE_CASE, Chunk, Provenance, derive_doc_id, new_chunk, sha256_file
+from ..types import (
+    FAILURE_CASE,
+    Chunk,
+    Provenance,
+    derive_doc_id,
+    ensure_ingest_size,
+    new_chunk,
+    sha256_file,
+)
 
 _COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
     "case_id": ("case_id", "id", "case", "no", "case_no", "件番", "ケース番号", "管理番号"),
@@ -67,11 +75,20 @@ def _read_rows(path: Path) -> list[dict]:
     if path.suffix.lower() == ".jsonl":
         rows = []
         for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-            if line.strip():
-                rows.append(json.loads(line))
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict):
+                rows.append(row)
         return rows
-    with open(path, encoding="utf-8-sig", newline="") as handle:
-        return [dict(row) for row in csv.DictReader(handle)]
+    try:
+        with open(path, encoding="utf-8-sig", newline="") as handle:
+            return [dict(row) for row in csv.DictReader(handle)]
+    except csv.Error as exc:
+        raise ValueError(f"Could not parse CSV failure log {path}: {exc}") from exc
 
 
 def _norm_severity(raw: str) -> str:
@@ -89,6 +106,7 @@ def _value(row: dict, mapping: dict[str, str], field_name: str) -> str:
 def ingest_failures(path: str | Path, doc_id: str | None = None) -> list[Chunk]:
     """Parse a CSV or JSONL failure log into one chunk per incident."""
     path = Path(path)
+    ensure_ingest_size(path)
     source_sha256 = sha256_file(path)
     doc_id = doc_id or derive_doc_id(path)
     chunks: list[Chunk] = []

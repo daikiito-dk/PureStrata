@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -124,10 +125,29 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--embedding-model", help="Local SentenceTransformer model directory")
     p.add_argument("--hybrid", action="store_true", help="Enable local BM25 + embedding search")
 
-    p = sub.add_parser("serve", help="Run the MCP server (stdio) over a corpus")
+    p = sub.add_parser("serve", help="Run the MCP server (stdio or HTTP) over a corpus")
     p.add_argument("--corpus", default="corpus", help="Corpus directory (default: ./corpus)")
     p.add_argument("--embedding-model", help="Local SentenceTransformer model directory")
     p.add_argument("--hybrid", action="store_true", help="Enable local BM25 + embedding search")
+    p.add_argument(
+        "--transport",
+        choices=["stdio", "http"],
+        default="stdio",
+        help="stdio for local clients; http for remote Streamable HTTP with bearer auth",
+    )
+    p.add_argument(
+        "--host",
+        help="Bind address for --transport http (default: 127.0.0.1)",
+    )
+    p.add_argument("--port", type=int, help="Bind port for --transport http (default: 8000)")
+    p.add_argument(
+        "--token",
+        help="Bearer token for --transport http (or set the PURESTRATA_TOKEN environment variable)",
+    )
+    p.add_argument(
+        "--authorization-server-url",
+        help="OAuth authorization server advertised by this resource server (default: its own URL)",
+    )
     return parser
 
 
@@ -289,7 +309,34 @@ def _run_serve(args: argparse.Namespace) -> int:
         raise ValueError("--hybrid requires --embedding-model pointing to a local model directory.")
     if args.embedding_model and not args.hybrid:
         raise ValueError("--embedding-model requires --hybrid; BM25 remains the default.")
-    serve(args.corpus, embedding_model=args.embedding_model, hybrid_search=args.hybrid)
+    token = args.token or os.environ.get("PURESTRATA_TOKEN")
+    if args.transport == "stdio":
+        if args.token or args.host or args.port or args.authorization_server_url:
+            raise ValueError(
+                "--host/--port/--token/--authorization-server-url require --transport http."
+            )
+        serve(args.corpus, embedding_model=args.embedding_model, hybrid_search=args.hybrid)
+        return 0
+    if args.token:
+        print(
+            "warning: --token exposes the bearer token in the process list and shell "
+            "history; prefer the PURESTRATA_TOKEN environment variable.",
+            file=sys.stderr,
+        )
+    if not token:
+        raise ValueError(
+            "--transport http requires --token or the PURESTRATA_TOKEN environment variable."
+        )
+    serve(
+        args.corpus,
+        embedding_model=args.embedding_model,
+        hybrid_search=args.hybrid,
+        transport=args.transport,
+        host=args.host,
+        port=args.port,
+        token=token,
+        authorization_server_url=args.authorization_server_url,
+    )
     return 0
 
 

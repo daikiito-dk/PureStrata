@@ -22,6 +22,7 @@ from ..types import (
     Chunk,
     Provenance,
     derive_doc_id,
+    ensure_ingest_size,
     new_chunk,
     sha256_file,
 )
@@ -93,6 +94,7 @@ class _Section:
 def ingest_manual(path: str | Path, doc_id: str | None = None) -> list[Chunk]:
     """Parse a manual or spec sheet into a list of chunks."""
     path = Path(path)
+    ensure_ingest_size(path)
     doc_id = doc_id or derive_doc_id(path)
     raw = _read_text(path)
     return _parse_markdown(
@@ -109,6 +111,9 @@ def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
+_MAX_PDF_PAGES = 1000
+
+
 def _extract_pdf_text(path: Path) -> str:
     try:
         from pypdf import PdfReader
@@ -116,10 +121,20 @@ def _extract_pdf_text(path: Path) -> str:
         raise RuntimeError(
             "PDF ingestion requires the 'pdf' extra. Install it with: pip install 'purestrata[pdf]'"
         ) from exc
-    reader = PdfReader(str(path))
+    # pypdf is the only third-party parser on the ingest path; treat every
+    # PDF as untrusted input.
+    try:
+        reader = PdfReader(str(path))
+    except Exception as exc:
+        raise ValueError(f"Could not read PDF {path}: {exc}") from exc
     parts = []
     for number, page in enumerate(reader.pages, start=1):
-        text = page.extract_text() or ""
+        if number > _MAX_PDF_PAGES:
+            break
+        try:
+            text = page.extract_text() or ""
+        except Exception:
+            continue
         parts.append(f"# Page {number}\n\n{text}")
     return "\n\n".join(parts)
 

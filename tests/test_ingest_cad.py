@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from purestrata import ingest_dxf
 from purestrata.ingest.cad import parse_dxf
 
@@ -45,3 +47,32 @@ def test_dxf_chunk(dxf_path):
     assert "MOUNTING BRACKET MK3" in drawing.text
     assert "SS400" in drawing.text
     assert "Layers: PART-OUTLINE, DIMENSIONS, TITLEBLOCK" in drawing.text
+
+
+def test_dxf_non_finite_values_are_dropped(tmp_path):
+    dxf = (
+        "0\nSECTION\n2\nHEADER\n"
+        "9\n$INSUNITS\n70\n1e999\n"
+        "0\nENDSEC\n"
+        "0\nSECTION\n2\nENTITIES\n"
+        "0\nLINE\n8\nPART-OUTLINE\n"
+        "10\n1e999\n20\n0.0\n"
+        "11\n10.0\n21\n10.0\n"
+        "0\nENDSEC\n0\nEOF\n"
+    )
+    path = tmp_path / "crafted.dxf"
+    path.write_text(dxf, encoding="utf-8")
+
+    parsed = parse_dxf(path)
+    assert parsed["units"] == "unspecified"
+    assert parsed["bounds"] == {"min_x": 10.0, "min_y": 10.0, "max_x": 10.0, "max_y": 10.0}
+
+
+def test_ingest_size_limit_is_enforced(monkeypatch, tmp_path):
+    import purestrata.types as types
+
+    path = tmp_path / "big.dxf"
+    path.write_text("0\nEOF\n", encoding="utf-8")
+    monkeypatch.setattr(types, "MAX_INGEST_BYTES", 1)
+    with pytest.raises(ValueError, match="exceeds the 1-byte limit"):
+        ingest_dxf(path)

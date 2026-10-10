@@ -33,7 +33,7 @@ Four scenes run locally against the bundled data:
 | Field failures never reach design | Failure cases linked to parts and drawings by exact ID | Cross-department knowledge loop, notifications |
 | Veteran know-how leaves with retirement | Offline expert review, approved-only export, dataset evaluation | Multi-user review queues, reviewer attribution, audit logs |
 
-Everything runs locally: the corpus is plain JSONL you own, and the SaaS layers collaboration on the same format instead of locking it in.
+Everything runs locally: the corpus is plain JSONL you own, and the SaaS layers collaboration on the same format instead of locking it in. The hosted design (control plane with review workflow, SSO, and audit logs; corpora stay in the customer's environment) is in [docs/SAAS.md](../../docs/SAAS.md).
 
 ## 日本語
 
@@ -68,4 +68,4 @@ make scenes                        # または: uv run python examples/scenes/ru
 | 現場の不具合が設計に届かない | 完全IDで部品・図面に紐付く故障記録 | 部門横断のナレッジループと通知 |
 | 熟練工の退職とともに知識が消える | オフライン専門家レビュー、承認済みのみの書き出し、データセット評価 | 多人数のレビューキュー、レビュー担当者の記名、監査ログ |
 
-すべてはローカルで動きます。コーパスは自分が所有するプレーンなJSONLで、SaaSはその形式の上に協業の層を足すだけで、ロックインは生みません。
+すべてはローカルで動きます。コーパスは自分が所有するプレーンなJSONLで、SaaSはその形式の上に協業の層を足すだけで、ロックインは生みません。ホスティング設計（レビュー・SSO・監査ログを持つコントロールプレーン。コーパスは顧客環境に残す）は [docs/SAAS.md](../../docs/SAAS.md) にまとめています。

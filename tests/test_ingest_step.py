@@ -74,3 +74,25 @@ def test_unit_conversion():
     assert to_mm(1.0, "inches") == 25.4
     assert to_mm(2.5, "cm") == 25.0
     assert to_mm(1.0, "unspecified") is None
+
+
+def test_step_deep_nesting_is_bounded(tmp_path):
+    nested = "(" * 5000 + "1" + ")" * 5000
+    content = (
+        f"ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\n#1=FOO({nested});\nENDSEC;\nEND-ISO-10303-21;\n"
+    )
+    path = tmp_path / "nested.step"
+    path.write_text(content, encoding="utf-8")
+    parse_step(path)  # must not raise RecursionError
+
+
+def test_step_oversized_entity_ids_are_skipped(tmp_path):
+    huge_id = "9" * 5000
+    content = (
+        "ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\n"
+        f"#{huge_id}=PRODUCT('A','A','',());\n"
+        "ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+    path = tmp_path / "huge.step"
+    path.write_text(content, encoding="utf-8")
+    assert parse_step(path)["products"] == []

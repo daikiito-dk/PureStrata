@@ -8,12 +8,21 @@ supported.
 
 from __future__ import annotations
 
+import math
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
 from ..pipeline.clean import clean_inline
-from ..types import DRAWING, Chunk, Provenance, derive_doc_id, new_chunk, sha256_file
+from ..types import (
+    DRAWING,
+    Chunk,
+    Provenance,
+    derive_doc_id,
+    ensure_ingest_size,
+    new_chunk,
+    sha256_file,
+)
 from .geometry import (
     describe_circular_features,
     format_number,
@@ -40,16 +49,17 @@ _Y_CODES = frozenset({20, 21, 22, 23})
 
 def _to_float(value: str) -> float | None:
     try:
-        return float(value)
+        number = float(value)
     except ValueError:
         return None
+    # Crafted values like "1e999" parse to inf; keep bounds and downstream
+    # JSON free of non-finite numbers.
+    return number if math.isfinite(number) else None
 
 
 def _to_int(value: str) -> int | None:
-    try:
-        return int(float(value))
-    except ValueError:
-        return None
+    number = _to_float(value)
+    return int(number) if number is not None else None
 
 
 def _read_pairs(path: Path) -> list[tuple[int, str]]:
@@ -81,6 +91,7 @@ def _norm_key(key: str) -> str:
 def parse_dxf(path: str | Path) -> dict:
     """Parse an ASCII DXF file into a metadata summary."""
     path = Path(path)
+    ensure_ingest_size(path)
     layers: list[dict] = []
     blocks: list[dict] = []
     entities: list[dict] = []

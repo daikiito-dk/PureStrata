@@ -160,3 +160,54 @@ def test_final_review_decision_requires_reviewer(tmp_path, corpus):
 
     with pytest.raises(ValueError, match="reviewer is required"):
         decide_review(bundle_path, entry["review_id"], "approved")
+
+
+def test_approved_export_detects_status_flips(tmp_path, corpus):
+    record = build_cot_records(corpus, limit=1)[0]
+    bundle_path = write_review_bundle(
+        create_review_bundle("cot", [record]), tmp_path / "review.jsonl"
+    )
+    entry = json.loads(bundle_path.read_text(encoding="utf-8"))
+    entry["status"] = "approved"
+    entry["review"] = {
+        "reviewer": "forged-reviewer",
+        "notes": None,
+        "decided_at": "2026-01-01T00:00:00+00:00",
+    }
+    bundle_path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="outside decide_review"):
+        approved_records(bundle_path)
+
+
+def test_approved_export_rejects_approval_without_reviewer(tmp_path, corpus):
+    from purestrata.export.review import _entry_state_sha256
+
+    record = build_cot_records(corpus, limit=1)[0]
+    bundle_path = write_review_bundle(
+        create_review_bundle("cot", [record]), tmp_path / "review.jsonl"
+    )
+    entry = json.loads(bundle_path.read_text(encoding="utf-8"))
+    # A forged approval that even recomputes the state hash still lacks a
+    # reviewer decision, and the export must refuse it.
+    entry["status"] = "approved"
+    entry["state_sha256"] = _entry_state_sha256(entry)
+    bundle_path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no reviewer decision"):
+        approved_records(bundle_path)
+
+
+def test_legacy_bundle_without_state_hash_still_loads(tmp_path, corpus):
+    record = build_cot_records(corpus, limit=1)[0]
+    bundle = create_review_bundle("cot", [record])
+    entry = bundle[0]
+    del entry["state_sha256"]
+    entry["status"] = "approved"
+    entry["review"] = {
+        "reviewer": "legacy-reviewer",
+        "notes": None,
+        "decided_at": "2026-01-01T00:00:00+00:00",
+    }
+    bundle_path = write_review_bundle(bundle, tmp_path / "review.jsonl")
+    assert approved_records(bundle_path) == [record]

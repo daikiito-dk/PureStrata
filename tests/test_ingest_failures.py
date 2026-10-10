@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from purestrata import ingest_failures
 
 
@@ -11,6 +13,29 @@ def test_all_rows_ingested(failures_csv):
     chunks = ingest_failures(failures_csv)
     assert len(chunks) == 8
     assert all(chunk.kind == "failure_case" for chunk in chunks)
+
+
+def test_malformed_jsonl_lines_are_skipped(tmp_path):
+    path = tmp_path / "failures.jsonl"
+    path.write_text(
+        "[1, 2, 3]\n"
+        '{"case_id": "C-1", "equipment": "Press", "symptom": "oil leak"}\n'
+        "{broken json\n",
+        encoding="utf-8",
+    )
+    chunks = ingest_failures(path)
+    assert len(chunks) == 1
+    assert chunks[0].metadata["case_id"] == "C-1"
+
+
+def test_csv_field_overflow_is_a_graceful_error(tmp_path):
+    path = tmp_path / "failures.csv"
+    path.write_text(
+        "case_id,symptom\nC-1," + "x" * (200 * 1024) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="Could not parse CSV"):
+        ingest_failures(path)
 
 
 def test_ids_and_severity(failures_csv):

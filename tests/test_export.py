@@ -64,3 +64,11 @@ def test_write_jsonl_roundtrip(corpus, tmp_path):
     lines = out.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 2
     assert json.loads(lines[0])["instruction"] == records[0]["instruction"]
+
+
+def test_write_jsonl_leaves_no_partial_or_temp_files(corpus, tmp_path):
+    records = build_cot_records(corpus, limit=2)
+    out = write_jsonl(records, tmp_path / "dataset.jsonl")
+    assert [path.name for path in tmp_path.iterdir()] == ["dataset.jsonl"]
+    loaded = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert loaded == [json.loads(json.dumps(record, default=str)) for record in records]

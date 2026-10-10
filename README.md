@@ -133,7 +133,7 @@ Your corpus is queried locally; results go back to the model with provenance.
 }
 ```
 
-Step-by-step setup for Claude Desktop, Claude Code, Factory Droid, Cursor, and VS Code, with example prompts and troubleshooting: **[docs/MCP.md](docs/MCP.md)**.
+Step-by-step setup for Claude Desktop, Claude Code, Factory Droid, Cursor, and VS Code, with example prompts and troubleshooting, plus remote deployment over Streamable HTTP with bearer-token auth: **[docs/MCP.md](docs/MCP.md)**.
 
 **LlamaIndex / distilabel** — optional adapters keep provenance intact: retrieve from a PureStrata corpus inside LlamaIndex, or feed reviewed records into distilabel pipelines. Setup and supported versions: **[docs/ADAPTERS.md](docs/ADAPTERS.md)**.
 
@@ -148,9 +148,7 @@ executor = ps.ToolExecutor(ps.Corpus.load("corpus/"))
 hits = executor.execute("search_failure_cases", {"query": "spindle vibration", "top_k": 3})
 
 # Optional hybrid search, using a model already present on disk
-corpus = ps.Corpus.load(
-    "corpus/", embedding_model="/models/e5-small", hybrid_search=True
-)
+corpus = ps.Corpus.load("corpus/", embedding_model="/models/e5-small", hybrid_search=True)
 hits = corpus.search("journal bearing fault", top_k=5)
 ```
 
@@ -200,7 +198,7 @@ Review bundles start as `pending` and retain source provenance. Approve/reject d
 
 Current: local ingestion (Markdown, PDF, ASCII DXF, STEP AP203/AP214/AP242, CSV/JSONL), BM25 search with Japanese support, optional local hybrid semantic search, geometry search over drawings (hole diameter, fit class, material, CAD format, DXF layer), MCP server, tool schemas, fine-tune exports, offline dataset evaluation, expert review with approved-only exports, and optional LlamaIndex/distilabel adapters.
 
-Planned: HTML/DXF-R2018 support, and a hosted SaaS for teams that need managed ingestion, access control, and shared expert-review workflows.
+Planned: HTML/DXF-R2018 support, and a hosted SaaS for teams that need managed ingestion, access control, and shared expert-review workflows. The SaaS design (control-plane/data-plane split, so corpora can stay on-prem) is written up in [docs/SAAS.md](docs/SAAS.md).
 
 ## Development
 
