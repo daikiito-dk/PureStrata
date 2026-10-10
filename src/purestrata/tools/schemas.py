@@ -1,6 +1,6 @@
 """Tool definitions for LLM function calling.
 
-The same nine tools are exposed three ways:
+The same ten tools are exposed three ways:
 as JSON Schemas (:func:`json_schemas`), as OpenAI-style function definitions
 (:func:`openai_tools`, also understood by xAI Grok and most OpenAI-compatible
 endpoints), and as Anthropic-style definitions (:func:`anthropic_tools`).

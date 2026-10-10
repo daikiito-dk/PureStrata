@@ -8,5 +8,6 @@ build/
 .ruff_cache/
 examples/corpus/
 examples/output/
+droid-wiki/
 .env
 .DS_Store
