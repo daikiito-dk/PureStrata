@@ -81,7 +81,7 @@ purestrata export cot        --corpus corpus/ --out dataset_cot.jsonl
 
 | Kind | Source | What the LLM gets |
 | --- | --- | --- |
-| `manual_section` | Markdown / PDF manuals | Clean, chunked spec-sheet passages with section paths |
+| `manual_section` | Markdown / PDF / HTML manuals | Clean, chunked spec-sheet passages with section paths |
 | `procedure` | Numbered lists in manuals | Ordered maintenance steps as structured arrays |
 | `safety_notice` | WARNING / CAUTION lines (EN + JA) | Severity-tagged precautions |
 | `part_record` | Parts tables | Part number, name, quantity, spec |
@@ -196,9 +196,9 @@ Review bundles start as `pending` and retain source provenance. Approve/reject d
 
 ## Status and roadmap
 
-Current: local ingestion (Markdown, PDF, ASCII DXF, STEP AP203/AP214/AP242, CSV/JSONL), BM25 search with Japanese support, optional local hybrid semantic search, geometry search over drawings (hole diameter, fit class, material, CAD format, DXF layer), MCP server, tool schemas, fine-tune exports, offline dataset evaluation, expert review with approved-only exports, and optional LlamaIndex/distilabel adapters.
+Current: local ingestion (Markdown, PDF, HTML, ASCII DXF up to R2018, STEP AP203/AP214/AP242, CSV/JSONL), BM25 search with Japanese support, optional local hybrid semantic search, geometry search over drawings (hole diameter, fit class, material, CAD format, DXF layer), MCP server, tool schemas, fine-tune exports, offline dataset evaluation, expert review with approved-only exports, and optional LlamaIndex/distilabel adapters.
 
-Planned: HTML/DXF-R2018 support, and a hosted SaaS for teams that need managed ingestion, access control, and shared expert-review workflows. The SaaS design (control-plane/data-plane split, so corpora can stay on-prem) is written up in [docs/SAAS.md](docs/SAAS.md).
+Planned: a hosted SaaS for teams that need managed ingestion, access control, and shared expert-review workflows. The SaaS design (control-plane/data-plane split, so corpora can stay on-prem) is written up in [docs/SAAS.md](docs/SAAS.md).
 
 ## Development
 

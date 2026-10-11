@@ -47,7 +47,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     for name, help_text in (
-        ("ingest-manual", "Ingest Markdown/PDF manuals and spec sheets"),
+        ("ingest-manual", "Ingest Markdown/PDF/HTML manuals and spec sheets"),
         ("ingest-dxf", "Ingest ASCII DXF CAD drawings"),
         ("ingest-step", "Ingest STEP (ISO 10303-21) 3D models"),
         ("ingest-failures", "Ingest CSV/JSONL failure logs"),

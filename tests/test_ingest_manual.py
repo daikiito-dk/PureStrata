@@ -114,3 +114,43 @@ def test_ingest_manual_rejects_unreadable_pdf(tmp_path):
     path.write_bytes(b"not a pdf at all, just bytes")
     with pytest.raises(ValueError, match="Could not read PDF"):
         ingest_manual(path)
+
+
+def test_ingest_html_manual(tmp_path):
+    html = """<!DOCTYPE html>
+<html><head><title>HP-50 MAINTENANCE MANUAL</title>
+<style>body { color: red; }</style>
+<script>var tracker = 1;</script></head>
+<body>
+<h2>Daily inspection</h2>
+<p>Check oil level before operation.</p>
+<p><strong>WARNING:</strong> High pressure can cause injury.</p>
+<h2>Seal replacement</h2>
+<ol><li>Depressurize the circuit.</li><li>Replace the seal kit.</li></ol>
+<h2>Parts list</h2>
+<table>
+<tr><th>Part No</th><th>Name</th><th>Qty</th></tr>
+<tr><td>SL-0050</td><td>Seal kit</td><td>1</td></tr>
+<tr><td>OR-110</td><td>O-ring</td><td>2</td></tr>
+</table>
+</body></html>
+"""
+    path = tmp_path / "press_manual.html"
+    path.write_text(html, encoding="utf-8")
+
+    chunks = ingest_manual(path)
+    kinds = _kinds(chunks)
+    assert SAFETY_NOTICE in kinds
+    assert PROCEDURE in kinds
+    assert PART_RECORD in kinds
+
+    notice = next(c for c in chunks if c.kind == SAFETY_NOTICE)
+    assert notice.metadata["severity"] == "warning"
+    assert "High pressure" in notice.text
+    procedure = next(c for c in chunks if c.kind == PROCEDURE)
+    assert procedure.metadata["steps"] == ["Depressurize the circuit.", "Replace the seal kit."]
+    assert any("SL-0050" in c.text for c in chunks if c.kind == PART_RECORD)
+
+    full_text = " ".join(c.text for c in chunks)
+    assert "tracker" not in full_text
+    assert "color: red" not in full_text

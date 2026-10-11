@@ -1,15 +1,17 @@
-"""Ingest technical manuals and spec sheets (Markdown, PDF) into chunks.
+"""Ingest technical manuals and spec sheets (Markdown, PDF, HTML) into chunks.
 
 The parser recognizes the structure maintenance documents actually use:
 ATX headings for sections, numbered lists for procedures, pipe tables for
 parts lists, and warning/caution lines (English or Japanese) for safety
-notices. PDF is supported through the optional ``pdf`` extra (pypdf).
+notices. PDF is supported through the optional ``pdf`` extra (pypdf); HTML
+is converted to the same Markdown dialect with the standard library only.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from pathlib import Path
 
 from ..pipeline.chunk import split_long_text
@@ -106,9 +108,102 @@ def ingest_manual(path: str | Path, doc_id: str | None = None) -> list[Chunk]:
 
 
 def _read_text(path: Path) -> str:
-    if path.suffix.lower() == ".pdf":
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
         return _extract_pdf_text(path)
+    if suffix in (".html", ".htm"):
+        return _html_to_markdown(path.read_text(encoding="utf-8", errors="replace"))
     return path.read_text(encoding="utf-8", errors="replace")
+
+
+class _HTMLToMarkdown(HTMLParser):
+    """Convert HTML into the Markdown dialect that _parse_markdown reads.
+
+    Headings, paragraphs, lists, blockquotes, bold, and pipe tables are
+    preserved; script and style content is dropped entirely.
+    """
+
+    _HEADINGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
+    _BLOCKS = _HEADINGS | {"p", "blockquote", "table", "ul", "ol", "title"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skip = 0
+        self._bold = 0
+        self._cell: list[str] | None = None
+        self._row: list[str] | None = None
+        self._header_row = False
+
+    def _emit(self, text: str) -> None:
+        if self._skip:
+            return
+        if self._cell is not None:
+            self._cell.append(text)
+        else:
+            self.parts.append(text)
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag in ("script", "style"):
+            self._skip += 1
+        elif self._skip:
+            return
+        elif tag in self._HEADINGS or tag == "title":
+            level = tag[1] if tag in self._HEADINGS else "1"
+            self.parts.append("\n\n" + "#" * int(level) + " ")
+        elif tag == "p":
+            self.parts.append("\n\n")
+        elif tag == "br":
+            self._emit("\n")
+        elif tag == "li":
+            # The downstream parser recognizes numbered lists as procedures.
+            self.parts.append("\n1. ")
+        elif tag == "blockquote":
+            self.parts.append("\n\n> ")
+        elif tag in ("strong", "b"):
+            self._bold += 1
+            self._emit("**")
+        elif tag == "tr":
+            self._row = []
+            self._header_row = False
+        elif tag in ("th", "td"):
+            self._cell = []
+            if tag == "th":
+                self._header_row = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in ("script", "style"):
+            self._skip = max(0, self._skip - 1)
+        elif self._skip:
+            return
+        elif tag in self._BLOCKS:
+            self.parts.append("\n\n")
+        elif tag in ("strong", "b"):
+            if self._bold:
+                self._bold -= 1
+                self._emit("**")
+        elif tag in ("th", "td"):
+            if self._cell is not None and self._row is not None:
+                text = clean_inline("".join(self._cell)).replace("|", "/")
+                self._row.append(text)
+            self._cell = None
+        elif tag == "tr":
+            if self._row:
+                self.parts.append("\n| " + " | ".join(self._row) + " |")
+                if self._header_row:
+                    self.parts.append("\n| " + " | ".join("---" for _ in self._row) + " |")
+            self._row = None
+            self._header_row = False
+
+    def handle_data(self, data: str) -> None:
+        self._emit(re.sub(r"\s+", " ", data))
+
+
+def _html_to_markdown(html_text: str) -> str:
+    converter = _HTMLToMarkdown()
+    converter.feed(html_text)
+    converter.close()
+    return "".join(converter.parts)
 
 
 _MAX_PDF_PAGES = 1000

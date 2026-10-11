@@ -40,6 +40,16 @@ _UNIT_CODES = {
     6: "m",
 }
 
+_DXF_VERSIONS = {
+    "AC1009": "R11/R12",
+    "AC1015": "R2000",
+    "AC1018": "R2004",
+    "AC1021": "R2007",
+    "AC1024": "R2010",
+    "AC1027": "R2013",
+    "AC1032": "R2018",
+}
+
 _MTEXT_ESCAPE_RE = re.compile(r"\\[Pp]")
 _TITLE_FIELD_RE = re.compile(r"^([A-Za-z][A-Za-z0-9 _/.\-#]{0,40}?)\s*[:：]\s*(.+)$")
 
@@ -64,6 +74,8 @@ def _to_int(value: str) -> int | None:
 
 def _read_pairs(path: Path) -> list[tuple[int, str]]:
     text = path.read_text(encoding="utf-8", errors="replace")
+    if text.startswith("AutoCAD Binary DXF"):
+        raise ValueError(f"Binary DXF is not supported ({path}); save the drawing as ASCII DXF.")
     lines = text.splitlines()
     pairs: list[tuple[int, str]] = []
     i = 0
@@ -152,7 +164,17 @@ def parse_dxf(path: str | Path) -> dict:
             elif code in (1, 3):
                 current_entity["texts"].append(value)
             elif code in _X_CODES or code in _Y_CODES:
-                current_entity["points"][code] = _to_float(value)
+                # Repeated coordinate codes (LWPOLYLINE vertices) accumulate.
+                number = _to_float(value)
+                points = current_entity["points"]
+                if code not in points:
+                    points[code] = number
+                else:
+                    existing = points[code]
+                    if isinstance(existing, list):
+                        existing.append(number)
+                    else:
+                        points[code] = [existing, number]
             elif code == 40:
                 current_entity["radius"] = _to_float(value)
             continue
@@ -169,6 +191,8 @@ def parse_dxf(path: str | Path) -> dict:
 
     units_code = _to_int(header_vars.get("$INSUNITS:70", ""))
     units = _UNIT_CODES.get(units_code or -1, "unspecified")
+    version_code = header_vars.get("$ACADVER:1", "")
+    dxf_version = _DXF_VERSIONS.get(version_code, version_code or "unspecified")
 
     text_annotations = []
     title_block: dict[str, str] = {}
@@ -198,6 +222,7 @@ def parse_dxf(path: str | Path) -> dict:
 
     return {
         "units": units,
+        "dxf_version": dxf_version,
         "layers": layers,
         "blocks": [b["name"] for b in blocks],
         "entity_counts": dict(entity_counts),
@@ -211,27 +236,29 @@ def parse_dxf(path: str | Path) -> dict:
     }
 
 
+def _point_values(value) -> list[float]:
+    """Normalize a coordinate slot (scalar, list of vertices, or None)."""
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
 def _compute_bounds(entities: list[dict]) -> dict | None:
     xs: list[float] = []
     ys: list[float] = []
     for entity in entities:
         points = entity["points"]
         kind = entity["type"]
-        if kind == "LINE":
-            for x_code, y_code in ((10, 20), (11, 21)):
-                if x_code in points and y_code in points and points[x_code] is not None:
-                    xs.append(points[x_code])
-                    ys.append(points[y_code])
+        if kind in ("LINE", "LWPOLYLINE", "TEXT", "MTEXT"):
+            xs.extend(v for code in _X_CODES for v in _point_values(points.get(code)))
+            ys.extend(v for code in _Y_CODES for v in _point_values(points.get(code)))
         elif kind in ("CIRCLE", "ARC"):
             radius = entity["radius"]
-            if radius is not None and 10 in points and 20 in points and points[10] is not None:
-                xs.extend([points[10] - radius, points[10] + radius])
-                ys.extend([points[20] - radius, points[20] + radius])
-        elif (
-            kind in ("TEXT", "MTEXT") and points.get(10) is not None and points.get(20) is not None
-        ):
-            xs.append(points[10])
-            ys.append(points[20])
+            cx = _point_values(points.get(10))
+            cy = _point_values(points.get(20))
+            if radius is not None and cx and cy:
+                xs.extend([cx[0] - radius, cx[0] + radius])
+                ys.extend([cy[0] - radius, cy[0] + radius])
     if not xs:
         return None
     return {"min_x": min(xs), "min_y": min(ys), "max_x": max(xs), "max_y": max(ys)}
@@ -251,6 +278,7 @@ def ingest_dxf(path: str | Path, doc_id: str | None = None) -> list[Chunk]:
         "drawing_id": drawing_id,
         "file_name": path.name,
         "units": parsed["units"],
+        "dxf_version": parsed["dxf_version"],
         "size": parsed["size"],
         "circular_features": parsed["circular_features"],
         "diameter_callouts": parsed["diameter_callouts"],

@@ -65,7 +65,8 @@ def test_dxf_non_finite_values_are_dropped(tmp_path):
 
     parsed = parse_dxf(path)
     assert parsed["units"] == "unspecified"
-    assert parsed["bounds"] == {"min_x": 10.0, "min_y": 10.0, "max_x": 10.0, "max_y": 10.0}
+    # The 1e999 x-coordinate is dropped; the remaining finite endpoints stay.
+    assert parsed["bounds"] == {"min_x": 10.0, "min_y": 0.0, "max_x": 10.0, "max_y": 10.0}
 
 
 def test_ingest_size_limit_is_enforced(monkeypatch, tmp_path):
@@ -76,3 +77,35 @@ def test_ingest_size_limit_is_enforced(monkeypatch, tmp_path):
     monkeypatch.setattr(types, "MAX_INGEST_BYTES", 1)
     with pytest.raises(ValueError, match="exceeds the 1-byte limit"):
         ingest_dxf(path)
+
+
+def test_dxf_r2018_version_and_lwpolyline_bounds(tmp_path):
+    dxf = (
+        "0\nSECTION\n2\nHEADER\n"
+        "9\n$ACADVER\n1\nAC1032\n"
+        "9\n$INSUNITS\n70\n4\n"
+        "0\nENDSEC\n"
+        "0\nSECTION\n2\nENTITIES\n"
+        "0\nLWPOLYLINE\n8\nOUTLINE\n"
+        "10\n0.0\n20\n0.0\n"
+        "10\n50.0\n20\n0.0\n"
+        "10\n50.0\n20\n30.0\n"
+        "10\n0.0\n20\n30.0\n"
+        "0\nENDSEC\n0\nEOF\n"
+    )
+    path = tmp_path / "r2018.dxf"
+    path.write_text(dxf, encoding="utf-8")
+
+    parsed = parse_dxf(path)
+    assert parsed["dxf_version"] == "R2018"
+    assert parsed["units"] == "mm"
+    assert parsed["entity_counts"] == {"LWPOLYLINE": 1}
+    assert parsed["bounds"] == {"min_x": 0.0, "min_y": 0.0, "max_x": 50.0, "max_y": 30.0}
+    assert ingest_dxf(path)[0].metadata["dxf_version"] == "R2018"
+
+
+def test_binary_dxf_is_rejected_with_clear_error(tmp_path):
+    path = tmp_path / "binary.dxf"
+    path.write_bytes(b"AutoCAD Binary DXF\r\n\x1a\x00\x99\x00")
+    with pytest.raises(ValueError, match="Binary DXF is not supported"):
+        parse_dxf(path)
