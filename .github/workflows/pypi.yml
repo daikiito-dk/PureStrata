@@ -10,7 +10,7 @@ jobs:
     permissions:
       id-token: write # OIDC for PyPI trusted publishing (no token needed)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --all-extras
       - run: uv run ruff check src tests
